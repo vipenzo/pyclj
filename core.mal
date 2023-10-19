@@ -1,0 +1,101 @@
+(defmacro! defmacro  (fn* [name params & xs] (list 'defmacro! name (concat (list 'fn* params) xs))))
+
+(defmacro cond [& xs] (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) '(throw "odd number of forms to cond: ~xs")) (cons 'cond (rest (rest xs))))))
+
+(defmacro fn [params & xs] `(fn* ~params (do ~@xs)))
+
+(defmacro let [bindings & xs] `(let* ~bindings (do ~@xs)))
+
+(defmacro loop [bindings & xs] `(loop* ~bindings (do ~@xs)))
+
+(defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs)))
+
+(defn inc [x] (+ x 1))
+(defn dec [x] (- x 1))
+(defn second [xs] (nth xs 1))
+(defn negate [n] (* -1 n))
+
+(defmacro while [condition & body] `(if ~condition (do ~@body (while ~condition ~@body))))
+
+(defmacro dotimes [binding & body]
+  (let [var (first binding)
+        count (second binding)]
+    `(let [ivar (atom 0)]
+       (while (< @ivar ~count)
+         (let [~var @ivar]
+          ~@body)
+         (swap! ivar inc)))))
+
+(defn reduce [f ini coll]
+  (if (first coll)
+    (reduce f (f ini (first coll)) (rest coll))
+    ini))
+
+(defmacro sdump_ [& xs]  (vec (map (fn [s] `[(quote ~s) ~s]) xs) ))
+(defmacro sdump [& xs] `(let [syms (sdump_ ~@xs)] (reduce  (fn [st sym] (str st " " (first sym) "=" (second sym))) "sdump: " syms)))
+;--------------
+(defmacro comment [& xs] )
+
+(defmacro when [condition & body] `(if ~condition (do  ~@body))) 
+
+(defn next [coll]
+  (let [x (rest coll)]
+    (if (empty? x)
+      nil
+      x)))
+
+(defn range [& params]
+  (cond
+    (= (count params) 1) (range* 0 (first params) 1)
+    (= (count params) 2) (range* (first params) (second params) 1)
+    (= (count params) 3) (apply range* params)))
+
+;------ debug functions
+(defn debug-print [label value]
+  (println (str label "=" value))
+  value)
+
+(defmacro debug-let [bindings & body]
+  (let [debugged-bindings (mapcat (fn [sym-val_expr]
+                                    (let [s (first sym-val_expr)
+                                          v (second sym-val_expr)]
+                                      `[~s (debug-print (str "  let " (quote ~s)) ~v)]))
+                                  (partition 2 bindings))]
+    `(let ~debugged-bindings ~@body)))
+
+;-------- destruct
+(def destruct-associative nil)
+(def destruct-sequential nil)
+(defn destruct [bindings values]
+  (println "destruct" bindings values)
+  (when bindings
+    (cond (sequential? bindings)
+          (destruct-sequential bindings values)
+
+          (map? bindings)
+          (destruct-associative bindings values)
+
+          :else
+          [bindings values])))
+
+(defn destruct-sequential [binding-seq val-seq]
+  ;(println "destruct-sequential" binding-seq val-seq)
+    (if (= (first binding-seq) '&)
+      [(second binding-seq) val-seq]
+      (concat (destruct (first binding-seq) (first val-seq))
+              (destruct (next binding-seq) (next val-seq)))))
+  
+
+(defn destruct-associative [binding-map val-map]
+  (println "destruct-associative" binding-map val-map)
+  (let [default-map (get binding-map :or)
+              keys-bindings (get binding-map :keys)
+              binding-map (if keys-bindings
+                            (apply hash-map (interleave keys-bindings
+                                                        (map keyword keys-bindings)))
+                            binding-map)
+              binding-map (if default-map (dissoc binding-map :or) binding-map)
+              m (select-keys val-map (vals binding-map))]
+             (mapcat (fn [b v] (destruct b (get m v (get default-map (symbol v)))))
+                     (keys binding-map)
+                     (vals binding-map))))
