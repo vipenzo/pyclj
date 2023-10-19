@@ -1,1 +1,4 @@
-implement update
+- Integrate destruct into fn, let, loop
+- Implement multiarity functions
+- implement update, assoc-in, get-in, update-in
+
