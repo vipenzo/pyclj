@@ -95,15 +95,29 @@ def _keyword_Q(exp):
 def _function(Eval, Env, ast, env, params):
     #print(f"DEFINIZIONE_FUNZIONE. ast={ast}")
     if not isinstance(params, Vector):
-        raise Exception("Multiarity functions not yet implemented")
+        raise Exception("Function params should be Vectors")
     def fn(*args):
         return Eval(ast, Env(env, params, List(args)))
     fn.__meta__ = None
     fn.__ast__ = ast
+    fn.__multi_arity__ = False
     fn.__gen_env__ = lambda args: Env(env, params, args)
     return fn
 def _function_Q(f):
     return callable(f)
+def _multi_arity_function(Eval, Env, maf_dict, env):
+    #print(f"_multi_arity_function. maf_dict={maf_dict} list?={_list_Q(maf_dict[0][1])}")
+    def fn(*args):
+        params,ast = maf_dict[len(args)]
+        return Eval(ast, Env(env, params, List(args)))
+    fn.__meta__ = None
+    fn.__multi_arity__ = True
+    fn.__ast__ = lambda args: maf_dict[len(args)][1]
+    fn.__gen_env__ = lambda args: Env(env, maf_dict[len(args)][0], args)
+    return fn
+    
+    
+
 
 # lists
 class List(list):

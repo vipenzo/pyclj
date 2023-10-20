@@ -34,7 +34,6 @@ repl_env.set(types._symbol('to_radians'), math.radians)
 
 # core.mal: defined using the language itself
 REP("(def! *host-language* \"python\")")
-REP("(def! not (fn* [a] (if a false true)))")
 REP("(def! load-file (fn* [f] (eval (read-string (str \"(do \" (slurp f) \"\nnil)\") ))))")
 REP("(load-file \"mal/core.mal\")")
 

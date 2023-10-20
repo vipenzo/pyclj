@@ -15,4 +15,4 @@ Extensions:
 
 
 How to use it:
-- Execute mal_repl.py and get a repl prompt.
+- Execute mal_repl.py to get a repl prompt.

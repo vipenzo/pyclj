@@ -1,3 +1,5 @@
+(def! not (fn* [a] (if a false true)))
+
 (defmacro! defmacro  (fn* [name params & xs] (list 'defmacro! name (concat (list 'fn* params) xs))))
 
 (defmacro cond [& xs] (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) '(throw "odd number of forms to cond: ~xs")) (cons 'cond (rest (rest xs))))))

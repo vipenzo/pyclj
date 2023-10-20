@@ -106,7 +106,6 @@ def EVAL(ast, env):
             env = f.__gen_env__(el)
             env.set('__recur_target__', f)
             #env.dump_last()
-
         elif "quote" == a0:
             return ast[1]
         elif "quasiquoteexpand" == a0:
@@ -158,6 +157,8 @@ def EVAL(ast, env):
             else:
                 ast = a2
             # Continue loop (TCO)
+        elif "fn**" == a0: #multi arity
+            return types._multi_arity_function(EVAL, Env, ast[1], env)
         elif "fn*" == a0:
             #print(f"fn* ast={ast}")
             a1, a2 = ast[1], ast[2]
@@ -174,8 +175,15 @@ def EVAL(ast, env):
             env.set('__recur_target__', f)
         else:
             el = eval_ast(ast, env)
+            #print(f"else: ast={ast} el={el}")
             f = el[0]
-            if hasattr(f, '__ast__'):
+            if hasattr(f, '__multi_arity__') and f.__multi_arity__ :
+                ast = f.__ast__(el[1:])
+                env = f.__gen_env__(el[1:])
+                env.set('__recur_target__', f)
+                #print(f"calling multi arity. ast={ast} list?={types._list_Q(ast)}")
+                #env.dump_last()
+            elif hasattr(f, '__ast__'):
                 #print(f"eseguo funzione. el[0]={el[0]} parametri={el[1:]}")
                 ast = f.__ast__
                 env = f.__gen_env__(el[1:])

@@ -4,7 +4,7 @@ class Env():
     def __init__(self, outer=None, binds=None, exprs=None):
         self.data = {}
         self.outer = outer or None
-
+        #print(f"Env.__init__. binds={binds}")
         if binds:
             for i in range(len(binds)):
                 if binds[i] == "&":

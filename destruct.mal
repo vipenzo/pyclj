@@ -1,3 +1,27 @@
 
 
 
+(defn every?
+  [pred coll]
+  (cond
+   (nil? (seq coll)) true
+   (pred (first coll)) (recur pred (next coll))
+   :else false))
+
+(comment defmacro fn [params & xs] 
+  (if (every? list? (cons params xs))
+    (gestire)
+    `(fn* ~params (do ~@xs))))
+
+
+
+
+(defmacro fn-m [name & xs]
+  (let [maf-dict (apply hash-map (apply concat (map-indexed vector xs)))]
+    `(def! ~name 
+       (fn** ~maf-dict))))
+
+(fn-m foo
+      ([] (foo 7))
+      ([a] (foo a 3))
+      ([a b] (+ a b)))
