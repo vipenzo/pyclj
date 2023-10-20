@@ -1,11 +1,10 @@
 import functools
 import sys, traceback
-import mal_readline
-import mal_types as types
-import reader, printer
-from env import Env
-import core
-
+from . import mal_readline
+from . import  mal_types as types
+from . import  reader, printer
+from .env import Env
+from . import  core
 # read
 def READ(str):
     return reader.read_str(str)

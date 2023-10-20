@@ -1,4 +1,4 @@
-import mal_types as types
+from . import mal_types as types
 
 def _escape(s):
     return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')

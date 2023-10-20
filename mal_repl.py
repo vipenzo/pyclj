@@ -1,5 +1,5 @@
 
-from stepA_mal import Env,core,types,sys,mal_readline,reader,printer,traceback,PRINT,EVAL,READ
+from mal.stepA_mal import Env,core,types,sys,mal_readline,reader,printer,traceback,PRINT,EVAL,READ
 
 
 # repl
@@ -36,36 +36,7 @@ repl_env.set(types._symbol('to_radians'), math.radians)
 REP("(def! *host-language* \"python\")")
 REP("(def! not (fn* [a] (if a false true)))")
 REP("(def! load-file (fn* [f] (eval (read-string (str \"(do \" (slurp f) \"\nnil)\") ))))")
-REP("(load-file \"core.mal\")")
-#REP('(str \"(do \" (slurp \"core.mal\") \"\nnil)\")')
-
-"""
-REP("(defmacro!     defmacro (fn* [name params & xs] (list 'defmacro! name  (concat (list 'fn* params) xs))     ))")
-#REP("(defmacro! cond (fn* (& xs) (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs)))))))")
-#      (defmacro! cond (fn* [xs]   (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw   odd number of forms to cond  )) (cons (quote cond) (rest (rest xs)))))))
-REP("(defmacro   cond [xs]  (if (> (count xs) 0) (list 'if (first xs) (if (> (count xs) 1) (nth xs 1) (throw \"odd number of forms to cond\")) (cons 'cond (rest (rest xs))))))")
-#REP("(defmacro! fn (fn* (params & xs) (list 'fn* params (concat (list 'do) xs)) ))")
-REP("(defmacro fn [params & xs] `(fn* ~params (do ~@xs)))")
-#REP("(defmacro! let (fn* (bindings & xs) (list 'let* bindings (concat (list 'do) xs)) ))")
-REP("(defmacro let [bindings & xs] `(let* ~bindings (do ~@xs)))")
-#REP("(defmacro! defn (fn* (name params & xs) (concat (list 'def! name (concat (list 'fn params) xs)))))")
-REP("(defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs)))")
-
-
-if len(sys.argv) >= 2:
-    REP('(load-file "' + sys.argv[1] + '")')
-    sys.exit(0)
-"""
-
-"""
-(defn lunga [massimo cur] 
-    ;(println massimo cur)
-    (if (< cur massimo) 
-        (do (if (= 0 (mod cur 100000)) 
-                (println cur)) 
-            (lunga massimo (+ cur 1)))))
-"""
-
+REP("(load-file \"mal/core.mal\")")
 
 # repl loop
 REP("(println (str \"Mal [\" *host-language* \"]\"))")

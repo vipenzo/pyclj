@@ -1,11 +1,11 @@
 import copy, time, os
 from itertools import chain
 
-import  mal_types as types
-from mal_types import MalException, List, Vector
-import  mal_readline
-import  reader
-import  printer
+from . import  mal_types as types
+from .mal_types import MalException, List, Vector
+from . import  mal_readline
+from . import  reader
+from . import  printer
 
 from functools import reduce
 from operator import and_, gt,lt,le,ge,ne,add, sub, mul, floordiv, mod, pow
