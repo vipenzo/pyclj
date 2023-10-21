@@ -101,3 +101,23 @@
              (mapcat (fn [b v] (destruct b (get m v (get default-map (symbol v)))))
                      (keys binding-map)
                      (vals binding-map))))
+
+(defn every?
+  [pred coll]
+  (cond
+   (nil? (seq coll)) true
+   (pred (first coll)) (recur pred (next coll))
+   :else false))
+
+; Multi Arity Functions
+(defmacro fn [params & xs]
+  (if (every? list? (cons params xs))
+    (let [make-pair (fn [params-and-body]
+                      (let [params (first params-and-body)
+                            body (rest params-and-body)]
+                        [(count params) [params `(do ~@body)]]))
+          maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+      `(fn** ~maf-dict))
+    `(fn* ~params (do ~@xs))))
+
+(defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs))) ; redefined to use the new fn

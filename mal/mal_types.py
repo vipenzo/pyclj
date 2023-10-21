@@ -106,7 +106,7 @@ def _function(Eval, Env, ast, env, params):
 def _function_Q(f):
     return callable(f)
 def _multi_arity_function(Eval, Env, maf_dict, env):
-    #print(f"_multi_arity_function. maf_dict={maf_dict} list?={_list_Q(maf_dict[0][1])}")
+    print(f"_multi_arity_function. maf_dict={maf_dict}")
     def fn(*args):
         params,ast = maf_dict[len(args)]
         return Eval(ast, Env(env, params, List(args)))
