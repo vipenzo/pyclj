@@ -161,6 +161,13 @@ def _hash_map(*key_vals):
 def _hash_map_Q(exp): return type(exp) == Hash_Map
 
 
+# Hash sets
+class Hash_Set(frozenset): pass
+def _hash_set(*keys):
+    return frozenset(keys)
+def _hash_set_Q(exp): return type(exp) == frozenset
+
+
 # atoms
 class Atom(object):
     def __init__(self, val):

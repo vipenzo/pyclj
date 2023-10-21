@@ -1,4 +1,4 @@
-
+"""
 from mal.stepA_mal import Env,core,types,sys,mal_readline,reader,printer,traceback,PRINT,EVAL,READ
 
 
@@ -50,3 +50,7 @@ while True:
         print("Error:", printer._pr_str(e.object))
     except Exception as e:
         print("".join(traceback.format_exception(*sys.exc_info())))
+"""
+
+from mal.boot import REP,REPL
+REPL()

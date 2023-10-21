@@ -2,7 +2,7 @@ import copy, time, os
 from itertools import chain
 
 from . import  mal_types as types
-from .mal_types import MalException, List, Vector
+from .mal_types import MalException, List, Vector, Hash_Set
 from . import  mal_readline
 from . import  reader
 from . import  printer
@@ -136,8 +136,10 @@ def partition(*args):
 def conj(lst, *args):
     if types._list_Q(lst): 
         new_lst = List(list(reversed(list(args))) + lst)
-    else:
+    elif types._vector_Q(lst):
         new_lst = Vector(lst + list(args))
+    else:    
+        new_lst = Hash_Set(list(lst) + list(args))
     if hasattr(lst, "__meta__"):
         new_lst.__meta__ = lst.__meta__
     return new_lst
@@ -224,6 +226,8 @@ ns = {
         'vector': types._vector,
         'vector?': types._vector_Q,
         'hash-map': types._hash_map,
+        'set': types._hash_set,
+        'set?': types._hash_set_Q,
         'map?': types._hash_map_Q,
         'assoc': assoc,
         'dissoc': dissoc,

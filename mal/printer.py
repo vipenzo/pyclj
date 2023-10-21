@@ -14,6 +14,11 @@ def _pr_str(obj, print_readably=True):
         for k in obj.keys():
             ret.extend((_pr_str(k), _pr_str(obj[k],_r)))
         return "{" + " ".join(ret) + "}"
+    elif types._hash_set_Q(obj):
+        ret = []
+        for k in obj:
+            ret.extend((_pr_str(k, _r)))
+        return "#{" + " ".join(ret) + "}"
     elif type(obj) in types.str_types:
         if len(obj) > 0 and obj[0] == types._u('\u029e'):
             return ':' + obj[1:]

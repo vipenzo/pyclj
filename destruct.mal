@@ -15,3 +15,7 @@
   ([] (pippo 6) (pippo 3))
   ([a] (pippo a 6))
   ([a b] (* a b)))
+
+(defmacro def [name & xs]
+  `(def name ~@xs)
+  )

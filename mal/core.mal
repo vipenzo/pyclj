@@ -121,3 +121,13 @@
     `(fn* ~params (do ~@xs))))
 
 (defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs))) ; redefined to use the new fn
+
+
+; repl
+(defn repl-loop []
+  (let [input (readline "pyclj > ")
+        result (try*
+                 (eval (read-string input))
+                 (catch Exception e e))]
+    (println result)
+    (recur)))
