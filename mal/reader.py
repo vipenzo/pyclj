@@ -19,7 +19,7 @@ class Reader():
             return None
 
 def tokenize(str):
-    tre = re.compile(r"""[\s,]*(~@|\#\{|\#\(|\%\d?|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
+    tre = re.compile(r"""[\s,]*(~@|\#\{|\#\(|\%\&|\%\d?|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
     return [t for t in re.findall(tre, str) if t[0] != ';']
 
 def _unescape(s):
@@ -57,6 +57,8 @@ def read_anonymous_function(reader):
     def get_number(s):
         if s == "%":
             return 1
+        elif s == "%&":
+            return "&"
         elif s.startswith('%'):
             try:
                 return int(s[1:])
@@ -82,12 +84,19 @@ def read_anonymous_function(reader):
         n = get_number(token) 
         if n is None:
             ast.append(read_form(reader))
+        elif n == "&":
+            params[0] = _symbol("__param_rest__")
+            ast.append(params[0])
+            reader.next()
         else:
             params[n] = _symbol(f"__param_{n}__")
             ast.append(params[n])
             reader.next()
         token = reader.peek()
     reader.next()
+    if 0 in params:
+        params[max(params.keys())+1] = _symbol("&")
+        params[max(params.keys())+1] = params[0]
     return _list(_symbol('fn'), ordered_values(params), ast)
 
 def read_hash_map(reader):
