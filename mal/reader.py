@@ -25,12 +25,37 @@ def tokenize(str):
 def _unescape(s):
     return s.replace('\\\\', _u('\u029e')).replace('\\"', '"').replace('\\n', '\n').replace(_u('\u029e'), '\\')
 
+def read_int_token(m):
+    res = None
+    if m.group(2):
+        return 0
+    if m.group(3):
+        res = int(m.group(3))
+    elif m.group(4):
+        res = int(m.group(4), 16)
+    elif m.group(5):
+        res = int(m.group(5), 8)
+    elif m.group(6):
+        base = int(m.group(6))
+        res = int(m.group(7), int(base))
+    if m.group(1):
+        res = - res 
+    if not res:
+        print(f"read_int_token. m={m} group_2={m.group(2)} token={m.group(0)}")
+        raise Exception("Intero non riconosciuto")
+    return res       
+
+
 def read_atom(reader):
-    int_re = re.compile(r"-?[0-9]+$")
-    float_re = re.compile(r"-?[0-9][0-9.]*$")
+   # int_re = re.compile(r"-?[0-9]+$")
+    int_re = re.compile(r"^([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?$")
+    #float_re = re.compile(r"-?[0-9][0-9.]*$")
+    float_re = re.compile(r"([-+]?[0-9]+(\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?")
     string_re = re.compile(r'"(?:[\\].|[^\\"])*"')
     token = reader.next()
-    if re.match(int_re, token):     return int(token)
+    #print(f"read_atom. token={token}")
+    
+    if (m := re.match(int_re, token)):     return read_int_token(m)
     elif re.match(float_re, token): return float(token)
     elif re.match(string_re, token):return _s2u(_unescape(token[1:-1]))
     elif token[0] == '"':           raise Exception("expected '\"', got EOF")

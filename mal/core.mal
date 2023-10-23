@@ -122,12 +122,72 @@
 
 (defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs))) ; redefined to use the new fn
 
+(defmacro ns [&xs])
+
+(def print-python-traceback (atom false))
+
+(defn python-traceback-on []
+  (reset! print-python-traceback true))
+
+(defn python-traceback-off []
+  (reset! print-python-traceback false))
+
+
+(defn print_exception [e]
+  (println (str "Exception: " (get e "err")))
+  (println (str "   executing: " (get e "a1")))
+  (if @print-python-traceback
+    (println (str "   " (get e "exc_traceback"))))
+  )
+
+(defmacro try [& body]
+  `(try* (do ~@body) (catch* ex (print_exception ex)))
+  )
+
 
 ; repl
 (defn repl-loop []
   (let [input (readline "pyclj > ")
-        result (try*
+        result (try
                  (eval (read-string input))
-                 (catch Exception e e))]
+                 )]
     (println result)
     (recur)))
+
+
+; test framework
+(def deftests (atom {}))
+
+(defn do-report [d]
+  d)
+
+(defn assert-expr [msg form]
+  `(let [value__ ~form]
+     (if value__
+       (do-report {:type :pass, :message ~msg,
+                   :expected '~form, :actual value__})
+       (do-report {:type :fail, :message ~msg,
+                   :expected '~form, :actual value__}))))
+
+(defmacro try-expr [msg form]
+  `(try* ~(assert-expr msg form)
+         (catch* e
+                 (do-report {:type :error, :message ~msg,
+                             :expected '~form, :actual e}))))
+
+(defmacro is [form] `(try-expr nil ~form))
+
+(defmacro is-msg [form msg] `(try-expr ~msg ~form))
+
+(defmacro deftest [name & body]
+  `(swap! deftests assoc '~name '(do ~@body)))
+
+(deftest addition (is (= 4 (+ 2 2))) (is (= 7 (+ 3 4))))
+
+(defn run-test_ [sname]
+  (let [body (get @deftests sname)]
+    (if body
+      (eval body)
+      (str "test " sname "not defined !"))))
+
+(defmacro run-test [name] `(run-test_ '~name))

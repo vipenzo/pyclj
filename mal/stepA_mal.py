@@ -5,6 +5,7 @@ from . import  mal_types as types
 from . import  reader, printer
 from .env import Env
 from . import  core
+import traceback
 # read
 def READ(str):
     return reader.read_str(str)
@@ -132,15 +133,18 @@ def EVAL(ast, env):
             if len(ast) < 3:
                 return EVAL(ast[1], env)
             a1, a2 = ast[1], ast[2]
+            #print(f"try*. a2={a2}")
             if a2[0] == "catch*":
                 err = None
+                exc_traceback = None, None, None
                 try:
                     return EVAL(a1, env)
                 except types.MalException as exc:
                     err = exc.object
                 except Exception as exc:
-                    err = exc.args[0]
-                catch_env = Env(env, [a2[1]], [err])
+                    err = exc
+                    exc_traceback = traceback.format_exc()
+                catch_env = Env(env, [a2[1]], [{"err":err , "a1":a1, "exc_traceback":exc_traceback}])
                 return EVAL(a2[2], catch_env)
             else:
                 return EVAL(a1, env);

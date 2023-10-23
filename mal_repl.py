@@ -52,5 +52,6 @@ while True:
         print("".join(traceback.format_exception(*sys.exc_info())))
 """
 
-from mal.boot import REP,REPL
+from mal.boot import BOOT
+REP, REPL = BOOT()
 REPL()
