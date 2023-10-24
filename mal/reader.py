@@ -3,24 +3,78 @@ from .mal_types import (_symbol, _keyword, _list, _vector, _hash_map, _hash_set,
 
 class Blank(Exception): pass
 
+    
+__current_file_path__ = "__CONSOLE__"
+
+def set_current_file(filepath):
+    global __current_file_path__
+    save = __current_file_path__
+    __current_file_path__ = filepath
+    return save
+
 class Reader():
     def __init__(self, tokens, position=0):
         self.tokens = tokens
         self.position = position
+        self.file_path = __current_file_path__
 
     def next(self):
         self.position += 1
-        return self.tokens[self.position-1]
+        return self.tokens[self.position-1][0]
 
     def peek(self):
         if len(self.tokens) > self.position:
-            return self.tokens[self.position]
+            return self.tokens[self.position][0]
         else:
             return None
 
-def tokenize(str):
-    tre = re.compile(r"""[\s,]*(~@|\#\{|\#\(|\%\&|\%\d?|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""");
-    return [t for t in re.findall(tre, str) if t[0] != ';']
+    def filepath(self):
+        return self.file_path
+
+    def coords(self):
+        if len(self.tokens) > self.position-1:
+            return self.tokens[self.position-1][1:]
+        else:
+            return None
+
+def set_coords(o, reader):
+    if reader:
+        o.__coords__ = [reader.filepath(), reader.coords()]
+    return o
+
+def coords_tokenize(str):
+    tre = re.compile(r"""[\s,]*(~@|\#\{|\#\(|\%\&|\%\d?|[\[\]{}()'`~^@]|"(?:[\\].|[^\\"])*"?|;.*|[^\s\[\]{}()'"`@,;]+)""")
+    
+    tokens_with_coords = []
+    line_num = 1
+    col_num = 1
+    prev_start = 0
+    #print(f"str={str[0:50]}")
+    for match in re.finditer(tre, str):
+        token = match.group(1)
+        #print(f"token={token}")
+        if token[0] != ';':
+            start, end = match.span()
+            start = end - len(token)
+            #print(f"start={start} end={end} prev_start={prev_start}")
+            # Calcola la linea e la colonna basandosi sul contenuto fino al token attuale
+            prev_newlines = str.count('\n', prev_start, start)
+            #print(f"prev_newlines={prev_newlines}")
+            if prev_newlines > 0:
+                col_num = 1
+                line_num += prev_newlines   
+            else:
+                col_num += start - prev_start
+            prev_start = start
+            
+            #print(f"col_num={col_num} line_num={line_num}")
+
+            tokens_with_coords.append((token, line_num, col_num))
+
+    return tokens_with_coords
+
+def make_exception(ex, msg, reader):
+    return ex(msg + f" at position:{reader.coords()}")
 
 def _unescape(s):
     return s.replace('\\\\', _u('\u029e')).replace('\\"', '"').replace('\\n', '\n').replace(_u('\u029e'), '\\')
@@ -63,16 +117,17 @@ def read_atom(reader):
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
-    else:                           return _symbol(token)
+    else:                           return set_coords(_symbol(token), reader)
 
-def read_sequence(reader, typ=list, start='(', end=')'):
+def read_sequence(reader, typ, start='(', end=')'):
     ast = typ()
+    ast = set_coords(ast, reader)
     token = reader.next()
-    if token != start: raise Exception("expected '" + start + "'")
+    if token != start: raise make_exception(Exception, "expected '" + start + "'",reader)
 
     token = reader.peek()
     while token != end:
-        if not token: raise Exception("expected '" + end + "', got EOF")
+        if not token: raise make_exception(Exception, "expected '" + end + "', got EOF", reader)
         ast.append(read_form(reader))
         token = reader.peek()
     reader.next()
@@ -101,11 +156,11 @@ def read_anonymous_function(reader):
     params = {}
     ast = _list()
     token = reader.next()
-    if token != '#(': raise Exception("expected '#('")
+    if token != '#(': raise make_exception(Exception, "expected '#('", reader)
 
     token = reader.peek()
     while token != ')':
-        if not token: raise Exception("expected ')', got EOF")
+        if not token: raise make_exception(Exception, "expected ')', got EOF", reader)
         n = get_number(token) 
         if n is None:
             ast.append(read_form(reader))
@@ -125,12 +180,12 @@ def read_anonymous_function(reader):
     return _list(_symbol('fn'), ordered_values(params), ast)
 
 def read_hash_map(reader):
-    lst = read_sequence(reader, list, '{', '}')
+    lst = read_sequence(reader, _list, '{', '}')
     return _list(_symbol('hash-map')).__add__(lst)
     #return _hash_map(*lst)
 
 def read_hash_set(reader):
-    lst = read_sequence(reader, list, '#{', '}')
+    lst = read_sequence(reader, _list, '#{', '}')
     print(f"read_hash_set. lst={lst}")
     return _list(_symbol('set')).__add__(lst)
 
@@ -139,7 +194,8 @@ def read_list(reader):
     return read_sequence(reader, _list, '(', ')')
 
 def read_vector(reader):
-    return read_sequence(reader, _vector, '[', ']')
+    ast = read_sequence(reader, _vector, '[', ']')
+    return ast
 
 def read_form(reader):
     token = reader.peek()
@@ -169,30 +225,31 @@ def read_form(reader):
         return _list(_symbol('deref'), read_form(reader))
 
     # list
-    elif token == ')': raise Exception("unexpected ')'")
+    elif token == ')': raise make_exception(Exception, "unexpected ')'", reader)
     elif token == '(': return read_list(reader)
 
     # vector
-    elif token == ']': raise Exception("unexpected ']'");
-    elif token == '[': return read_vector(reader);
+    elif token == ']': raise make_exception(Exception, "unexpected ']'", reader)
+    elif token == '[': return read_vector(reader)
 
     # hash-set
-    elif token == '}': raise Exception("unexpected '}'");
-    elif token == '#{': return read_hash_set(reader);
+    elif token == '}': raise make_exception(Exception, "unexpected '}'", reader)
+    elif token == '#{': return read_hash_set(reader)
 
     # hash-map
-    elif token == '}': raise Exception("unexpected '}'");
+    elif token == '}': raise make_exception(Exception, "unexpected '}'", reader);
     elif token == '{': return read_hash_map(reader);
 
     # anonymous functions
-    elif token == ')': raise Exception("unexpected '}'");
+    elif token == ')': raise make_exception(Exception, "unexpected '}'", reader);
     elif token == '#(': return read_anonymous_function(reader);
 
-    elif token[0] == '%': raise Exception("'%' is allowed as token only in lambda functions");
+    elif token[0] == '%': raise make_exception(Exception, "'%' is allowed as token only in lambda functions", reader);
     # atom
     else:              return read_atom(reader);
 
+
 def read_str(str):
-    tokens = tokenize(str)
+    tokens = coords_tokenize(str)
     if len(tokens) == 0: raise Blank("Blank Line")
     return read_form(Reader(tokens))

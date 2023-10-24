@@ -75,9 +75,12 @@ def _string_Q(exp):
         return False
 def _number_Q(exp): return type(exp) == int
 
+
+
 # Symbols
 class Symbol(str): pass
-def _symbol(str): return Symbol(str)
+def _symbol(str): 
+    return Symbol(str)
 def _symbol_Q(exp): return type(exp) == Symbol
 
 # Keywords

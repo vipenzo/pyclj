@@ -1,4 +1,4 @@
-from .stepA_mal import Env,core,types,sys,mal_readline,reader,printer,traceback,PRINT,EVAL,READ
+from .interpreter import Env,core,types,sys,mal_readline,reader,printer,traceback,PRINT,EVAL,READ
 
 def BOOT():
     # repl
@@ -31,8 +31,35 @@ def BOOT():
 
     # core.mal: defined using the language itself
     REP("(def! *host-language* \"python\")")
-    REP("(def! load-file (fn* [f] (eval (read-string (str \"(do \" (slurp f) \"\nnil)\") ))))")
+    
+    REP("(def! print-python-traceback (atom true))")
 
+    REP("(def! python-traceback-on (fn* [] (reset! print-python-traceback true)))")
+
+    REP("(def! python-traceback-off (fn* [] (reset! print-python-traceback false)))")
+
+    REP("""(def! print_exception 
+        (fn* [e]
+        (do 
+            (println (str "Exception: " (get e "err")))
+            (println (str "   executing: " (get e "a1")))
+            (if @print-python-traceback
+                (println (str "   " (get e "exc_traceback")))))))
+            """)
+
+    
+    REP("""
+    (def! load-file 
+        (fn* [f] 
+            (let* [content (slurp f)
+                  old-file (set-current-file f)]
+                (do 
+                    (try*
+                        (eval (read-string (str "(do " content "\nnil)")))
+                        (catch* e (print_exception e)))
+                    (set-current-file old-file)))))
+    """)
+    
     import os
     current_file_path = os.path.realpath(__file__)
     mal_directory = os.path.dirname(current_file_path)

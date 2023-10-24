@@ -180,10 +180,11 @@ def compare_op(op, values):
         return reduce(and_, b_values)
     
 def slurp(filepath):
-    print(f"filepath={filepath} curdir={os.getcwd()}")
+    #print(f"filepath={filepath} curdir={os.getcwd()}")
     with open(filepath, 'r', encoding='utf-8') as file:
         return file.read()
     
+        
 ns = { 
         '=': types._equal_Q,
         'throw': throw,
@@ -263,5 +264,7 @@ ns = {
         'atom?': types._atom_Q,
         'deref': deref,
         'reset!': reset_BANG,
-        'swap!': swap_BANG}
+        'swap!': swap_BANG,
+        'set-current-file': reader.set_current_file
+        }
 

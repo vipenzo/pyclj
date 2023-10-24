@@ -1,8 +1,10 @@
 # Environment
 
+        
 class Env():
     def __init__(self, outer=None, binds=None, exprs=None):
         self.data = {}
+        self.coords = {}
         self.outer = outer or None
         #print(f"Env.__init__. binds={binds}")
         if binds:
@@ -17,9 +19,11 @@ class Env():
         if key in self.data: return self
         elif self.outer:     return self.outer.find(key)
         else:                return None
-
+        
     def set(self, key, value):
         self.data[key] = value
+        if hasattr(key, '__coords__'):
+            self.coords[key] = key.__coords__
         return value
 
     def get(self, key):
@@ -28,6 +32,12 @@ class Env():
             self.dump()
             raise Exception("'" + key + "' not found")
         return env.data[key]
+
+    def get_coords(self, key):
+        env = self.find(key)
+        if not env: 
+            return None
+        return env.coords[key]
 
     def dump(self, indent=""):
         print(f"{indent} env dump {len(self.data)}")

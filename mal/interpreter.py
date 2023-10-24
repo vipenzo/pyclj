@@ -62,10 +62,12 @@ def eval_ast(ast, env):
     else:
         return ast  # primitive value, return unchanged
 
+
+    
 def EVAL(ast, env):
     #print("EVAL %s" % printer._pr_str(ast))
     while True:
-        #print("L-EVAL %s" % printer._pr_str(ast))
+        #print(f"L-EVAL {printer._pr_str(ast)} coords={get_coords(ast)}")
         if not types._list_Q(ast):
             return eval_ast(ast, env)
 
@@ -77,13 +79,14 @@ def EVAL(ast, env):
             return eval_ast(ast, env)
         if len(ast) == 0: return ast
         a0 = ast[0]
-
+        
         if "env_dump" == a0:
             env.dump()
             return None
         elif "def!" == a0 or "def" == a0:
             a1, a2 = ast[1], ast[2]
-            res = EVAL(a2, env)
+            #print(f"EVAL.def. a1={a1} coords={get_coords(a1)}")
+            res = (EVAL(a2, env))
             #print(f"EVAL(def*) res={res}")
             return env.set(a1, res)
         elif "let*" == a0:
@@ -177,6 +180,9 @@ def EVAL(ast, env):
             ast = f.__ast__
             env = f.__gen_env__(el)
             env.set('__recur_target__', f)
+        elif "get-coords" == a0:
+            a1 = ast[1]
+            return env.get_coords(a1)
         else:
             el = eval_ast(ast, env)
             #print(f"else: ast={ast} el={el}")
