@@ -108,15 +108,27 @@ def _function(Eval, Env, ast, env, params):
     return fn
 def _function_Q(f):
     return callable(f)
+
+
 def _multi_arity_function(Eval, Env, maf_dict, env):
     print(f"_multi_arity_function. maf_dict={maf_dict}")
+    def maf_dispatcher(args):
+        n = len(args)
+        if len(args) in maf_dict:
+                n = len(args)
+        elif -1 in maf_dict:
+                n = -1
+        else: 
+            raise Exception("Calling multi arity function with wrong number of parameters")
+        return n
+        
     def fn(*args):
         params,ast = maf_dict[len(args)]
         return Eval(ast, Env(env, params, List(args)))
     fn.__meta__ = None
     fn.__multi_arity__ = True
-    fn.__ast__ = lambda args: maf_dict[len(args)][1]
-    fn.__gen_env__ = lambda args: Env(env, maf_dict[len(args)][0], args)
+    fn.__ast__ = lambda args: maf_dict[maf_dispatcher(args)][1]
+    fn.__gen_env__ = lambda args: Env(env, maf_dict[maf_dispatcher(args)][0], args)
     return fn
     
     

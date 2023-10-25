@@ -109,13 +109,23 @@
    (pred (first coll)) (recur pred (next coll))
    :else false))
 
+(defn some
+  [pred coll]
+  (cond
+    (nil? (seq coll)) false
+    (pred (first coll)) (first coll)
+    :else (recur pred (next coll))))
+
+
 ; Multi Arity Functions
 (defmacro fn [params & xs]
   (if (every? list? (cons params xs))
     (let [make-pair (fn [params-and-body]
                       (let [params (first params-and-body)
-                            body (rest params-and-body)]
-                        [(count params) [params `(do ~@body)]]))
+                            body (rest params-and-body)
+                            variadic? (some (fn [par] (= (str par) "&")) params )
+                            k (if variadic? -1 (count params))]
+                        [k [params `(do ~@body)]]))
           maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
       `(fn** ~maf-dict))
     `(fn* ~params (do ~@xs))))

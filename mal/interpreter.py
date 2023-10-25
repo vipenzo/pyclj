@@ -201,7 +201,10 @@ def EVAL(ast, env):
                 #env.get('__recur_target__').__gen_env__(el).dump_last()
                 #print(f"recur el={el}")
                 f = env.get('__recur_target__')
-                ast = f.__ast__
+                if f.__multi_arity__ :
+                    ast = f.__ast__(el)
+                else:
+                    ast = f.__ast__
                 env = f.__gen_env__(el)
                 env.set('__recur_target__', f)
             elif "get-coords" == a0:

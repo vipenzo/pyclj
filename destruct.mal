@@ -1,16 +1,12 @@
+(python-traceback-on)
 
-
-
-(defn bad-code []
-  (println "I'm going to do a bad thing")
-  (println "really")
-  (println "really bad")
-  (/ 5 0)
-  (println "Ok, I did it")
+(defn pippo
+  ([] (recur 3))
+  ([a] (inc a))
+  ([& xs] (apply + xs))
   )
 
-(def a '(1 2 3 4 5))
-(def sss 'foo)
-(def aaa 33)
-(bad-code)
-(def b [5 6 7 8])
+(def peppe (fn 
+             ([] (recur 33))
+             ([a] (dec a))
+             ))
