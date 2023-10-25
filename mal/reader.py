@@ -74,12 +74,17 @@ def coords_tokenize(str):
     return tokens_with_coords
 
 def make_exception(ex, msg, reader):
-    return ex(msg + f" at position:{reader.coords()}")
+    return ex(msg + f" in file {reader.filepath()} at position:{reader.coords()}")
+
+def make_symbol(token, reader):
+    sym = _symbol(token)
+    set_coords(sym, reader)
+    return sym
 
 def _unescape(s):
     return s.replace('\\\\', _u('\u029e')).replace('\\"', '"').replace('\\n', '\n').replace(_u('\u029e'), '\\')
 
-def read_int_token(m):
+def read_int_token(m, reader):
     res = None
     if m.group(2):
         return 0
@@ -96,7 +101,7 @@ def read_int_token(m):
         res = - res 
     if not res:
         print(f"read_int_token. m={m} group_2={m.group(2)} token={m.group(0)}")
-        raise Exception("Intero non riconosciuto")
+        raise make_exception(Exception, f"read_int_token. m={m} group_2={m.group(2)} token={m.group(0)}", reader) 
     return res       
 
 
@@ -109,15 +114,15 @@ def read_atom(reader):
     token = reader.next()
     #print(f"read_atom. token={token}")
     
-    if (m := re.match(int_re, token)):     return read_int_token(m)
+    if (m := re.match(int_re, token)):     return read_int_token(m, reader)
     elif re.match(float_re, token): return float(token)
     elif re.match(string_re, token):return _s2u(_unescape(token[1:-1]))
-    elif token[0] == '"':           raise Exception("expected '\"', got EOF")
+    elif token[0] == '"':           raise make_exception(Exception,"expected '\"', got EOF", reader)
     elif token[0] == ':':           return _keyword(token[1:])
     elif token == "nil":            return None
     elif token == "true":           return True
     elif token == "false":          return False
-    else:                           return set_coords(_symbol(token), reader)
+    else:                           return make_symbol(token, reader)
 
 def read_sequence(reader, typ, start='(', end=')'):
     ast = typ()
@@ -155,6 +160,7 @@ def read_anonymous_function(reader):
 
     params = {}
     ast = _list()
+    set_coords(ast, reader)
     token = reader.next()
     if token != '#(': raise make_exception(Exception, "expected '#('", reader)
 
@@ -165,29 +171,35 @@ def read_anonymous_function(reader):
         if n is None:
             ast.append(read_form(reader))
         elif n == "&":
-            params[0] = _symbol("__param_rest__")
+            params[0] = make_symbol("__param_rest__", reader)
             ast.append(params[0])
             reader.next()
         else:
-            params[n] = _symbol(f"__param_{n}__")
+            params[n] = make_symbol(f"__param_{n}__", reader)
             ast.append(params[n])
             reader.next()
         token = reader.peek()
     reader.next()
     if 0 in params:
-        params[max(params.keys())+1] = _symbol("&")
+        params[max(params.keys())+1] = make_symbol("&", reader)
         params[max(params.keys())+1] = params[0]
-    return _list(_symbol('fn'), ordered_values(params), ast)
+    res = _list(make_symbol('fn', reader), ordered_values(params), ast)
+    set_coords(res, reader)
+    return res
 
 def read_hash_map(reader):
     lst = read_sequence(reader, _list, '{', '}')
-    return _list(_symbol('hash-map')).__add__(lst)
+    res = _list(make_symbol('hash-map', reader)).__add__(lst)
+    set_coords(res, reader)
+    return res
     #return _hash_map(*lst)
 
 def read_hash_set(reader):
     lst = read_sequence(reader, _list, '#{', '}')
     print(f"read_hash_set. lst={lst}")
-    return _list(_symbol('set')).__add__(lst)
+    res =  _list(make_symbol('set', reader)).__add__(lst)
+    set_coords(res, reader)
+    return res
 
 
 def read_list(reader):
@@ -206,24 +218,35 @@ def read_form(reader):
         return None
     elif token == '\'':
         reader.next()
-        return _list(_symbol('quote'), read_form(reader))
+        res = _list(make_symbol('quote', reader), read_form(reader))
+        set_coords(res, reader)
+        return res
     elif token == '`':
         reader.next()
-        return _list(_symbol('quasiquote'), read_form(reader))
+        res = _list(make_symbol('quasiquote', reader), read_form(reader))
+        set_coords(res, reader)
+        return res
     elif token == '~':
         reader.next()
-        return _list(_symbol('unquote'), read_form(reader))
+        res =  _list(make_symbol('unquote', reader), read_form(reader))
+        set_coords(res, reader)
+        return res
     elif token == '~@':
         reader.next()
-        return _list(_symbol('splice-unquote'), read_form(reader))
+        res =  _list(make_symbol('splice-unquote', reader), read_form(reader))
+        set_coords(res, reader)
+        return res
     elif token == '^':
         reader.next()
         meta = read_form(reader)
-        return _list(_symbol('with-meta'), read_form(reader), meta)
+        res = _list(make_symbol('with-meta', reader), read_form(reader), meta)
+        set_coords(res, reader)
+        return res
     elif token == '@':
         reader.next()
-        return _list(_symbol('deref'), read_form(reader))
-
+        res = _list(make_symbol('deref', reader), read_form(reader))
+        set_coords(res, reader)
+        return res
     # list
     elif token == ')': raise make_exception(Exception, "unexpected ')'", reader)
     elif token == '(': return read_list(reader)
@@ -251,5 +274,6 @@ def read_form(reader):
 
 def read_str(str):
     tokens = coords_tokenize(str)
+    #print(f"read_str. str={str} tokens={tokens}")
     if len(tokens) == 0: raise Blank("Blank Line")
     return read_form(Reader(tokens))

@@ -124,18 +124,23 @@
 
 (defmacro ns [&xs])
 
-;(def print-python-traceback (atom false))
+(def print-python-traceback (atom false))
 
-;(defn python-traceback-on [] (reset! print-python-traceback true))
+(defn python-traceback-on [] (reset! print-python-traceback true))
 
-;(defn python-traceback-off [] (reset! print-python-traceback false))
+(defn python-traceback-off [] (reset! print-python-traceback false))
 
 
-(comment defn print_exception [e]
+(defn print_exception [e]
   (println (str "Exception: " (get e "err")))
   (println (str "   executing: " (get e "a1")))
+  (let [tb (get e "ast_info")
+        tba (map (fn [el] (str (pr-str (first el)) " - "(second el))) tb)
+        tbs (join tba "\n   - ")
+        ]
+    (println (str "   lisp traceback: \n   - " tbs)))
   (if @print-python-traceback
-    (println (str "   " (get e "exc_traceback"))))
+    (println (str "   " (get e "python_traceback"))))
   )
 
 (defmacro try [& body]

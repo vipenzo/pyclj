@@ -184,6 +184,9 @@ def slurp(filepath):
     with open(filepath, 'r', encoding='utf-8') as file:
         return file.read()
     
+def join(arr, sep):
+    result = sep.join(arr)
+    return result
         
 ns = { 
         '=': types._equal_Q,
@@ -265,6 +268,7 @@ ns = {
         'deref': deref,
         'reset!': reset_BANG,
         'swap!': swap_BANG,
-        'set-current-file': reader.set_current_file
+        'set-current-file': reader.set_current_file,
+        "join":join
         }
 

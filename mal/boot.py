@@ -30,6 +30,8 @@ def BOOT():
     boot_env.set(types._symbol('to_radians'), math.radians)
 
     # core.mal: defined using the language itself
+    REP("(set-current-file \"__BOOT__\")")
+    
     REP("(def! *host-language* \"python\")")
     
     REP("(def! print-python-traceback (atom true))")
@@ -59,6 +61,9 @@ def BOOT():
                         (catch* e (print_exception e)))
                     (set-current-file old-file)))))
     """)
+    
+    
+    REP("(set-current-file \"__CONSOLE__\")")
     
     import os
     current_file_path = os.path.realpath(__file__)

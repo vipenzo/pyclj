@@ -29,7 +29,7 @@ class Env():
     def get(self, key):
         env = self.find(key)
         if not env: 
-            self.dump()
+            #self.dump()
             raise Exception("'" + key + "' not found")
         return env.data[key]
 
