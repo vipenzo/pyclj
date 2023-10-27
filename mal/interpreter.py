@@ -79,8 +79,8 @@ def get_coords(el):
     
 def EVAL(ast, env):
     #print("EVAL %s" % printer._pr_str(ast))
-    try:
-        while True:
+    while True:
+        try:
             #print(f"L-EVAL {printer._pr_str(ast)} coords={get_coords(ast)}")
             if not types._list_Q(ast):
                 return eval_ast(ast, env)
@@ -229,15 +229,16 @@ def EVAL(ast, env):
                     #env.dump()
                 else:
                     return f(*el[1:])
-    except Exception as exc:
-        ast_info = [ast, ast.__coords__ if hasattr(ast,'__coords__') else None]
-        #print(f"eccezione sulla EVAL. ast_info={ast_info}")
-        if hasattr(exc, '__ast_info__'):
-            #print(f"old ast_info:{exc.__ast_info__}")
-            exc.__ast_info__.append(ast_info)
-        else:
-            exc.__ast_info__ = [ast_info]
-        raise
+        except Exception as exc:
+            ast_info = [ast, ast.__coords__ if hasattr(ast,'__coords__') else None]
+            #print(f"eccezione sulla EVAL. ast_info={ast_info}")
+            if hasattr(exc, '__ast_info__'):
+                #print(f"old ast_info:{exc.__ast_info__}")
+                exc.__ast_info__.append(ast_info)
+            else:
+                exc.__ast_info__ = [ast_info]
+            raise
+
 # print
 def PRINT(exp):
     return printer._pr_str(exp)

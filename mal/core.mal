@@ -12,6 +12,13 @@
 
 (defmacro defn [name params & xs] `(def! ~name (fn ~params ~@xs)))
 
+(defmacro time [& xs]
+  `(let [start-time (time-ms)
+          res (do ~@xs)]
+         (println "function executed in " (- (time-ms) start-time) " ms")
+         res))
+
+
 (defn inc [x] (+ x 1))
 (defn dec [x] (- x 1))
 (defn second [xs] (nth xs 1))
@@ -204,6 +211,15 @@
       (str "test " sname "not defined !"))))
 
 (defmacro run-test [name] `(run-test_ '~name))
+
+(defn filter [pred coll]
+  (if (not (empty? coll))
+    (let [x (first coll)]
+      (if (pred x)
+        (cons x (filter pred (rest coll)))
+        (filter pred (rest coll)))
+      )
+    coll))
 
 
 (load-file "destruct.mal")

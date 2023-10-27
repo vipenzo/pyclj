@@ -187,6 +187,9 @@ def slurp(filepath):
 def join(arr, sep):
     result = sep.join(arr)
     return result
+
+def set(coll):
+    return types._hash_set(*coll)
         
 ns = { 
         '=': types._equal_Q,
@@ -220,6 +223,9 @@ ns = {
         '-':  lambda *xs: reduce(sub, xs),
         '/':  lambda a,b: (a/b),
         '*':  lambda *xs: reduce(mul, xs),
+        'and': lambda *xs: reduce(lambda a,b: a and b, xs),
+        'or': lambda *xs: reduce(lambda a,b: a or b, xs),
+        'xor': lambda *xs: reduce(lambda a,b: a and b, xs),
         'mod':  mod,
         'pow':  pow,
         'quot':  floordiv,
@@ -230,7 +236,7 @@ ns = {
         'vector': types._vector,
         'vector?': types._vector_Q,
         'hash-map': types._hash_map,
-        'set': types._hash_set,
+        'set': set,
         'set?': types._hash_set_Q,
         'map?': types._hash_map_Q,
         'assoc': assoc,

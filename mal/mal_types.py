@@ -142,6 +142,10 @@ class List(list):
         elif i >= len(self): return None
         else:                return list.__getitem__(self, i)
     def __getslice__(self, *a): return List(list.__getslice__(self, *a))
+    def __hash__(self):
+        return hash(tuple(self))
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
 def _list(*vals): return List(vals)
 def _list_Q(exp):   return type(exp) == List
 
