@@ -105,7 +105,7 @@ def EVAL(ast, env):
                 return env.set(a1, res)
             elif "let*" == a0:
                 a1, a2 = ast[1], ast[2]
-                #print(f"a1={a1} a2={a2} ast={ast}")
+                #print(f"let* ::::  a1={a1} a2={a2} ast={ast}")
                 let_env = Env(env)
                 for i in range(0, len(a1), 2):
                     let_env.set(a1[i], EVAL(a1[i+1], let_env))
@@ -227,6 +227,12 @@ def EVAL(ast, env):
                     env.set('__recur_target__', f)
                     #print("fn call.")
                     #env.dump()
+                elif types._vector_Q(f):
+                    return f[el[1]]
+                elif  types._hash_map_Q(f):
+                    return f[el[1]]
+                elif types._keyword_Q(f):
+                    return el[1][f]
                 else:
                     return f(*el[1:])
         except Exception as exc:

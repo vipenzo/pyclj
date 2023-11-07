@@ -1,12 +1,150 @@
-(python-traceback-on)
+(comment def let< (fn* [binding-vector & body]
+               (do
+                 (println "let< binding-vector=" binding-vector)
+                 (eval (apply list
+                              'let*
+                              (->> binding-vector
+                                   (partition 2)
+                                   (mapcat (fn* [bindings] (destruct (first bindings) (second bindings))))
+                                   vec)
+                              (list (cons 'do body)))))))
 
-(defn pippo
-  ([] (recur 3))
-  ([a] (inc a))
-  ([& xs] (apply + xs))
-  )
+(comment defmacro let [binding-vector & body]
+  (apply list 
+         'let<
+         (->> binding-vector
+              (partition 2)
+              (mapcat (fn* [bindings] (vector `~(first bindings) (second bindings)))))
+         (list `(quote ~@body))))
+  
 
-(def peppe (fn 
-             ([] (recur 33))
-             ([a] (dec a))
-             ))
+(comment debug-eval
+ (let* [AA [1 {:x 2 :y [3 4]}]
+        a (get-in AA [0])
+        x (get-in AA [1 :x])
+        c (get-in AA [1 :y 0])
+        d (get-in AA [1 :y 1])
+        ]
+       [a x c d])
+ )
+
+(def bindings '[a {x :x [c d] :y}])
+(def values [1 {:x 2 :y [3 4]}])
+
+(def get-paths-sequential)
+(def get-paths-associative)
+(def get-paths (fn* [bindings current-path]
+                 (when bindings
+                   (cond (sequential? bindings)
+                         (get-paths-sequential bindings current-path)
+                 
+                         (map? bindings)
+                         (get-paths-associative bindings current-path)
+                 
+                         :else
+                         [bindings current-path]))))
+
+(def get-paths-sequential (fn* [bindings current-path]
+                               (map-indexed (fn* [i b] (get-paths b (conj current-path i))) bindings)))
+                            
+(def get-paths-associative (fn* [binding-map current-path]
+                                (let* [ks (keys binding-map)
+                                       vs (vals binding-map)]
+                                      (mapcat (fn* [k v] (get-paths k (conj current-path v))) ks vs))))
+
+(debug-eval
+ (get-paths-sequential '[a b c] [])
+ (get-paths-associative '{x :x y :y} [])
+ (get-paths 'x [3 :x])
+ (get-paths '[a {b :x}] [])
+ (get-paths '[a {[b c] :x}] [])
+ (get-paths '{[a {[b c] :x}] :z e :e} [])
+ (get-paths-sequential '[a b & c] [])
+ )
+
+(comment debug-eval
+ (destruct '[] [])
+ (destruct '[a b c] [1 2 3])
+ (destruct '[a b c & cs] (range 10))
+ (destruct '{a :a b :b c :c} {:a 1 :b 2 :c 3})
+ (destruct '{a :a b :b [x y & zs] :c} {:a 1 :b 2 :c (range 10)})
+ (destruct '{a :a b :b [x y & zs] :c d :d :or {:d 1000}}
+           {:a 1 :b 2 :c (range 10)})
+ (destruct '{a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}}
+           {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}))
+
+(comment debug-eval
+ (let [[] []] "nada")
+ (let [[a b c] [1 2 3]] [a b c])
+ (let [[a b c & cs] (range 10)] [a b c cs])
+ (let [{a :a b :b c :c} {:a 1 :b 2 :c 3}] [a b c])
+ (let [{a :a b :b [x y & zs] :c} {:a 1 :b 2 :c (range 10)}] [a b x y zs])
+ (let [{a :a b :b [x y & zs] :c d :d :or {:d 1000}}
+       {:a 1 :b 2 :c (range 10)}] [a b x y zs d])
+ (let [{a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}}
+       {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}] [a b x y zs d g h]))
+
+
+(comment debug-eval
+ (def list-of-things (range 10 20))
+
+;; OK...
+ (let [[a b c & cs] list-of-things] [a b c cs])
+
+;; uhhh...
+ (let [list-of-things (range 10)] (let [[a b c & cs] list-of-things] [a b c cs]))
+
+;; oh, $@!#
+ (defn uh-oh [list-of-things]
+   (let [[a b c & cs] list-of-things]
+     [a b c cs]))
+ (uh-oh (range 10))
+
+;; the beatings will continue until morale improves
+ (let [list-of-things (range 10)]
+   list-of-things))
+
+(comment def mmlet (fn* [bindings & body]
+                `(let* [~@bindings] ~@body)))
+
+
+(comment defmacro mlet [bindings & body]
+  (mmlet ~bindings ~@body))
+
+(comment defmacro fn-- [params & body]
+  `(fn* [& vals]
+        (mmlet (mapcat (fn* [b v] (destruct b v)) '[~@params] vals)
+               (do ~@body))))
+
+
+(comment defmacro fn-- [params & body]
+         `(fn* [& vals]
+               (let [[~@params] vals]
+                 (do ~@body))))
+
+; Multi Arity Functions
+(comment defmacro fn+ [params & xs]
+  (if (every? list? (cons params xs))
+    (let* [make-pair (fn* [params-and-body]
+                          (let* [params (first params-and-body)
+                                 body (rest params-and-body)
+                                 variadic? (some (fn* [par] (= (str par) "&")) params)
+                                 k (if variadic? -1 (count params))]
+                                [k [params `(do ~@body)]]))
+           maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+          `(fn** ~maf-dict))
+    `(fn-- ~params  ~@xs)))
+
+
+
+(comment defmacro fn-- [params & body]
+  `(fn* [& args]
+        (let [~@params args]
+          (do ~@body))))
+
+
+(comment debug-eval
+         (def prova (fn+ [[x y]] (+ x y)))
+         (prova [3 4]))
+
+

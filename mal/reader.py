@@ -1,5 +1,5 @@
 import re
-from .mal_types import (_symbol, _keyword, _list, _vector, _hash_map, _hash_set, _s2u, _u)
+from .mal_types import (_symbol, _keyword, _list, _vector, _hash_map, _hash_map_Q, _hash_set, _s2u, _u)
 
 class Blank(Exception): pass
 
@@ -131,11 +131,25 @@ def read_sequence(reader, typ, start='(', end=')'):
     if token != start: raise make_exception(Exception, "expected '" + start + "'",reader)
 
     token = reader.peek()
+    k = None
+    n = 0
+    def is_even(n):
+        return n % 2 == 0
     while token != end:
         if not token: raise make_exception(Exception, "expected '" + end + "', got EOF", reader)
-        ast.append(read_form(reader))
+        if _hash_map_Q(ast):
+            if is_even(n):
+                k = read_form(reader)
+                n = n + 1
+            else:
+                ast.add_pair(k, read_form(reader))
+                n = n + 1
+        else:
+            ast.append(read_form(reader))
         token = reader.peek()
     reader.next()
+    if _hash_map_Q(ast) and not is_even(n):
+        raise make_exception(Exception, "trying to define a hash_map with odd number of elements", reader)
     return ast
 
 def read_anonymous_function(reader):
@@ -188,11 +202,7 @@ def read_anonymous_function(reader):
     return res
 
 def read_hash_map(reader):
-    lst = read_sequence(reader, _list, '{', '}')
-    res = _list(make_symbol('hash-map', reader)).__add__(lst)
-    set_coords(res, reader)
-    return res
-    #return _hash_map(*lst)
+    return read_sequence(reader, _hash_map, '{', '}')
 
 def read_hash_set(reader):
     lst = read_sequence(reader, _list, '#{', '}')

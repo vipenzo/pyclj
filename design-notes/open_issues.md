@@ -4,4 +4,4 @@
 - Problema delle macro come defn che aggiungono una do
 - manca il nome delle funzioni nel traceback
 - (quot -1 5) a me torna -1, in clojure torna 0
-- (and 0 1) -> 0 (non 1 come in clojure)
+- defmacro multi-arity non funzionano

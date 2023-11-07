@@ -1,2 +1,2 @@
-s = "token1\ntoken2\ntoken3"
-prev_newlines = s.count('\n', 0, 7)
+s = []
+x = 33 if not s else 44

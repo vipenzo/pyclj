@@ -173,6 +173,9 @@ class Hash_Map(dict):
         if not isinstance(other, dict):
             return False
         return tuple(sorted(self.items())) == tuple(sorted(other.items()))
+    def add_pair(self, key, value):
+        self[key] = value
+
 def _hash_map(*key_vals):
     hm = Hash_Map()
     for i in range(0,len(key_vals),2): hm[key_vals[i]] = key_vals[i+1]

@@ -80,10 +80,12 @@ def nth(lst, idx):
 
 def first(lst):
     if types._nil_Q(lst): return None
+    if types._hash_map_Q(lst): return list(lst.items())[0]
     else: return lst[0]
 
 def rest(lst):
     if types._nil_Q(lst): return List([])
+    if types._hash_map_Q(lst): return List(list(lst.items())[1:])
     else: return List(lst[1:])
 
 def empty_Q(lst): return len(lst) == 0
@@ -91,6 +93,22 @@ def empty_Q(lst): return len(lst) == 0
 def count(lst):
     if types._nil_Q(lst): return 0
     else: return len(lst)
+
+def last(lst):
+    if types._nil_Q(lst): return None
+    if types._hash_map_Q(lst): return list(lst.items())[-1]
+    else: return lst[-1]
+    
+def take(lst, n):    
+    if types._nil_Q(lst): return List([])
+    if types._hash_map_Q(lst): return List(list(lst.items())[:n])
+    else: return List(lst[:n])
+
+def drop(lst, n):    
+   # print(f" drop impl. lst={lst} n={n}")
+    if types._nil_Q(lst): return List([])
+    if types._hash_map_Q(lst): return List(list(lst.items())[n:])
+    else: return List(lst[n:])
 
 def apply(f, *args): return f(*(list(args[0:-1])+args[-1]))
 
@@ -155,6 +173,7 @@ def seq(obj):
         return None
     else: throw ("seq: called on non-sequence")
 
+
 # Metadata functions
 def with_meta(obj, meta):
     new_obj = types._clone(obj)
@@ -190,6 +209,12 @@ def join(arr, sep):
 
 def set(coll):
     return types._hash_set(*coll)
+        
+def get_in(m, ks, not_found=None):
+    if not ks:
+        return m
+    else:
+        return get_in(m[ks[0]], ks[1:], not_found)
         
 ns = { 
         '=': types._equal_Q,
@@ -260,6 +285,9 @@ ns = {
         'rest': rest,
         'empty?': empty_Q,
         'count': count,
+        'take':take,
+        'drop':drop,
+        'last': last,
         'apply': apply,
         'map': mapf,
         'partition': partition,
@@ -275,6 +303,7 @@ ns = {
         'reset!': reset_BANG,
         'swap!': swap_BANG,
         'set-current-file': reader.set_current_file,
-        "join":join
+        "join":join,
+        'get-in': get_in
         }
 
