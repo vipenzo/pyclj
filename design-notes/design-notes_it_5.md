@@ -632,4 +632,119 @@ code:  (get-paths (quote {[a {[b c] :x}] :z e :e}) [])
 Ad ogni simbolo trovato nel binding viene associato il path da dare alla `get-in` per ricavare il valore di quel simbolo da un valore con lo stesso formato.
 Ci si potrebbe già implementare una `let`. Però non gestisce ancora nè i **variadic** nel caso delle sequenze ne **:or** e **:keys** nel caso associativo.
 Vediamo se riesco ad aggiungerli.
+### Variadic seq
+Modificando la get-paths-sequential così:
+```
+(def get-paths-sequential (fn* [binding-seq current-path]
+                               (do
+                                 (def variadic? (fn* [bindings]
+                                                     (and (>= (count bindings) 2) (= '& (nth bindings (- (count bindings) 2))))))
+                                 (if (variadic? binding-seq)
+                                   (let* [n-fixed-values (- (count binding-seq) 2)
+                                         variadic-sym (last binding-seq)
+                                         binding-seq (take binding-seq n-fixed-values)]
+                                     (conj  (vec (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq))  [variadic-sym [(negate n-fixed-values)]]))
+                                   (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq)))))
+ ```
+Si ottiene questo:
+```code:  (get-paths-sequential (quote [a b & c]) []) 
+    -->  [[a [0]] [b [1]] [c [-2]]]
+```
+Con quel `c` definito così basta prendere la parte precedente del path (in questo caso vuota, quindi tutto il valore senza fare get-in) e fare (drop (negate -2)) per ottenere gli argomenti richiesti.
+Però pone già il problema di doversi chiedere per ogni argomento se fare o no la get-in.
 
+Vediamo di tirar fuori `:or` e `:keys`.
+
+Ok, questa sembra andare:
+```
+(def get-paths-sequential)
+(def get-paths-associative)
+(def get-paths (fn* [bindings current-path]
+                 (when bindings
+                   (cond (sequential? bindings)
+                         (get-paths-sequential bindings current-path)
+                 
+                         (map? bindings)
+                         (get-paths-associative bindings current-path)
+                 
+                         :else
+                         [bindings current-path]))))
+
+(def get-paths-sequential (fn* [binding-seq current-path]
+                               (do
+                                 (def variadic? (fn* [bindings]
+                                                     (and (>= (count bindings) 2) (= '& (nth bindings (- (count bindings) 2))))))
+                                 (if (variadic? binding-seq)
+                                   (let* [n-fixed-values (- (count binding-seq) 2)
+                                         variadic-sym (last binding-seq)
+                                         binding-seq (take binding-seq n-fixed-values)]
+                                     (conj  (vec (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq))  [variadic-sym [(negate n-fixed-values)]]))
+                                   (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq)))))
+                            
+(def get-paths-associative (fn* [binding-map current-path]
+                                (let* [default-map (get binding-map :or)
+                                       keys-bindings (get binding-map :keys)
+                                       binding-map (if keys-bindings
+                                                     (apply hash-map (interleave keys-bindings
+                                                                                 (map keyword keys-bindings)))
+                                                     binding-map)
+                                       binding-map (if default-map (dissoc binding-map :or) binding-map)
+                                       ks (keys binding-map)
+                                       vs (vals binding-map)
+                                       f-get-path (fn* [k v]
+                                                    (if (contains? default-map v)
+                                                      (conj (get-paths k (conj current-path v)) (default-map v))
+                                                      (get-paths k (conj current-path v))))]
+                                      (vec (map f-get-path ks vs)))))
+
+```
+Sembra gestire sia `&` che `:or` che `:keys`
+```
+code:  (get-paths-sequential (quote [a b c]) []) 
+    -->  [['a', [0]], ['b', [1]], ['c', [2]]]
+code:  (get-paths-associative (quote {x :x y :y}) []) 
+    -->  [[x [:x]] [y [:y]]]
+code:  (get-paths (quote x) [3 :x]) 
+    -->  [x [3 :x]]
+code:  (get-paths (quote [a {b :x}]) []) 
+    -->  [['a', [0]], [['b', [1, 'ʞx']]]]
+code:  (get-paths (quote [a {[b c] :x}]) []) 
+    -->  [['a', [0]], [[['b', [1, 'ʞx', 0]], ['c', [1, 'ʞx', 1]]]]]
+code:  (get-paths (quote {[a {[b c] :x}] :z e :e}) []) 
+    -->  [[['a', ['ʞz', 0]], [[['b', ['ʞz', 1, 'ʞx', 0]], ['c', ['ʞz', 1, 'ʞx', 1]]]]] [e [:e]]]
+code:  (get-paths (quote [a b & c]) []) 
+    -->  [[a [0]] [b [1]] [c [-2]]]
+code:  (get-paths (quote {x :x y :y :or {:y 33}}) []) 
+    -->  [[x [:x]] [y [:y] 33]]
+code:  (get-paths (quote {:keys [x y z]}) []) 
+    -->  [[x [:x]] [y [:y]] [z [:z]]]
+```
+
+Ora posso usarla per farne una `let`.
+Ho trovato un bug logico nell'implementazione della `:or`
+Pensavo di usare il default get-in, e nei casi semplici avrebbe funzionato.
+Questa situazione: `[a {x :x y :y :or {:y 9}}] [3 {:x 4}]` sarebbe stata trasformata in:
+```
+(let* [a (get-in [3 {:x 4}] [0])
+       x (get-in [3 {:x 4}] [1 :x])
+       y (get-in [3 {:x 4}] [1 :y] 9)])
+```
+... che va bene. Ma questa: `[a {x :x [y z] :yz :or {:yz [9 8]}}] [3 {:x 4}]` non poteva funzionare.
+Per risolvere ho modificato la `get-paths-associative` in modo che il binding sopra ritorni:
+`[[a [0]] [x [1 :x]] [y [1 [:yz [9 8]] 0]] [z [1 [:yz [9 8]] 1]]]`
+In pratica il path della `y` ([y [1 [:yz [9 8]] 0]]) è un path che la get-in standard non riconoscerebbe. L'idea è che se nel path è presente un vettore questo contenga, come secondo elemento, il default dello step in corso.
+La implemento direttamente in python perchè è molto di base.
+```
+pyclj > (get-in [1 {:x 4 :y 5} 3] [1 :y])
+5
+pyclj > (get-in [1 {:x 4 :y 5} 3] [1 [:z 66]])
+66
+pyclj > (get-in [1 {:x 4 :y 5 :z 44} 3] [1 [:z 66]])
+44
+pyclj > (get-in [1 {:x 4 :y 5 :zz [44 45]} 3] [1 [:z [66 67]] 1])
+67
+pyclj > (get-in [1 {:x 4 :y 5 :z [44 45]} 3] [1 [:z [66 67]] 1])
+45
+```
+
+Ok, funziona tutto e direi che abbiamo la let. Ora potremmo implementare `fn` e `loop` e poi aggiungere le **trailing maps**

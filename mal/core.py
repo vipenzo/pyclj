@@ -44,12 +44,17 @@ def dissoc(src_hm, *keys):
     return hm
 
 def get(hm, key, default=None):
-    if hm is not None and key in hm:
+    if types._sequential_Q(hm):
+        if key < len(hm):
+            return hm[key]
+        else:
+            return default
+    elif hm is not None and key in hm:
         return hm.get(key)
     else:
         return default
 
-def contains_Q(hm, key): return key in hm
+def contains_Q(hm, key): return hm and key in hm
 
 def keys(hm): return types._list(*hm.keys())
 
@@ -211,10 +216,15 @@ def set(coll):
     return types._hash_set(*coll)
         
 def get_in(m, ks, not_found=None):
+    #print(f"get_in m={m} ks={ks}")
     if not ks:
         return m
     else:
-        return get_in(m[ks[0]], ks[1:], not_found)
+        if types._vector_Q(ks[0]):
+            el = get(m, ks[0][0], ks[0][1])
+        else:
+            el = get(m, ks[0], not_found)
+        return get_in(el, ks[1:], not_found)
         
 ns = { 
         '=': types._equal_Q,

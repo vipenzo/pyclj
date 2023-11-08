@@ -161,6 +161,11 @@ def EVAL(ast, env):
                     except types.MalException as exc:
                         #print(f"catched MalException")
                         err = exc.object
+                        python_traceback = traceback.format_exc()
+                        ast_info = exc.__ast_info__ if hasattr(exc, '__ast_info__') else None
+                        #print(ast_info)
+                        catch_env = Env(env, [a2[1]], [{"err":err , "a1":a1, "ast_info":ast_info, "python_traceback":python_traceback}])
+                        return EVAL(a2[2], catch_env)
                     except Exception as exc:
                         #print(f"catched Exception")
                         err = exc

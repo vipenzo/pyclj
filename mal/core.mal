@@ -98,7 +98,7 @@
 
 (defmacro ns [&xs])
 
-(def print-python-traceback (atom false))
+(def print-python-traceback (atom true))
 
 (def! python-traceback-on (fn* [] (reset! print-python-traceback true)))
 
@@ -109,11 +109,11 @@
                            (do
                              (println (str "Exception: " (get e "err")))
                              (println (str "   executing: " (get e "a1")))
-                             ;(let [tb (get e "ast_info")
-                             ;      tba (map (fn* [el] (str (pr-str (first el)) " - " (second el))) tb)
-                             ;      tbs (join tba "\n   - ")
-                             ;      ]
-                             ;  (println (str "   lisp traceback: \n   - " tbs)))
+                             (let* [tb (get e "ast_info")
+                                   tba (map (fn* [el] (str (pr-str (first el)) " - " (second el))) tb)
+                                   tbs (join tba "\n   - ")
+                                   ]
+                               (println (str "   lisp traceback: \n   - " tbs)))
                              (if @print-python-traceback
                                (println (str "   " (get e "python_traceback")))))))
 

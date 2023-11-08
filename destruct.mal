@@ -42,15 +42,75 @@
                          (get-paths-associative bindings current-path)
                  
                          :else
-                         [bindings current-path]))))
+                         [ [bindings current-path]]))))
 
-(def get-paths-sequential (fn* [bindings current-path]
-                               (map-indexed (fn* [i b] (get-paths b (conj current-path i))) bindings)))
+(def get-paths-sequential (fn* [binding-seq current-path]
+                               (do
+                                 (def variadic? (fn* [bindings]
+                                                     (and (>= (count bindings) 2) (= '& (nth bindings (- (count bindings) 2))))))
+                                 (if (variadic? binding-seq)
+                                   (let* [n-fixed-values (- (count binding-seq) 2)
+                                         variadic-sym (last binding-seq)
+                                         binding-seq (take binding-seq n-fixed-values)]
+                                     (conj  (vec (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq))  [variadic-sym [(negate n-fixed-values)]]))
+                                   (vec (apply concat (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq)))))))
                             
 (def get-paths-associative (fn* [binding-map current-path]
-                                (let* [ks (keys binding-map)
-                                       vs (vals binding-map)]
-                                      (mapcat (fn* [k v] (get-paths k (conj current-path v))) ks vs))))
+                                (let* [default-map (get binding-map :or)
+                                       keys-bindings (get binding-map :keys)
+                                       binding-map (if keys-bindings
+                                                     (apply hash-map (interleave keys-bindings
+                                                                                 (map keyword keys-bindings)))
+                                                     binding-map)
+                                       binding-map (if default-map (dissoc binding-map :or) binding-map)
+                                       ks (keys binding-map)
+                                       vs (vals binding-map)
+                                       f-get-path (fn* [k v]
+                                                    (if (contains? default-map v)
+                                                      (get-paths k (conj current-path [v (default-map v)])) 
+                                                      (get-paths k (conj current-path v))))]
+                                      (vec (apply concat (map f-get-path ks vs))))))
+
+(def butlast (fn* [coll]
+               (take (- (count coll) 1) coll)))
+
+(def make-let-bindings (fn* [sym-path-def value]
+                            (do
+                              (println "make-let-bindings sym-path-def=" sym-path-def " value=" value)
+                              (let* [sym (first sym-path-def)
+                                     path (second sym-path-def)
+                                     default (get-in sym-path-def [2])]
+                                    (if (empty? path)
+                                      [sym value]
+                                      (if (and (number? (last path)) (< (last path) 0))
+                                        (list sym (list 'drop (list 'get-in value (butlast path)) (negate (last path))))
+                                        (if default
+                                          (list sym (list 'get-in value path default))
+                                          (list sym (list 'get-in value path)))))))))
+                         
+
+(defmacro let [binding-vector & body]
+  (apply list
+         'let*
+         (->> binding-vector
+              (partition 2)
+              (mapcat (fn* [bindings]
+                           (if (symbol? (first bindings))
+                             [(first bindings) (second bindings)]
+                             (mapcat (fn* [b] (make-let-bindings b (second bindings)))
+                                     (get-paths (first bindings) [])))))
+              vec)
+         (list (cons 'do body))))
+
+(def binding-vector '[[x y] [3 4]])
+(def bindings (nth (partition 2 binding-vector) 0))
+(def paths (get-paths (first bindings) []))
+(def sym-path-def (nth paths 0))
+(def sym (first sym-path-def))
+(def path (second sym-path-def))
+;(def default (nth sym-path-def 2))
+;(def leave (last path))
+
 
 (debug-eval
  (get-paths-sequential '[a b c] [])
@@ -59,8 +119,23 @@
  (get-paths '[a {b :x}] [])
  (get-paths '[a {[b c] :x}] [])
  (get-paths '{[a {[b c] :x}] :z e :e} [])
- (get-paths-sequential '[a b & c] [])
+ (get-paths '[a b & c] [])
+ (get-paths '{x :x y :y :or {:y 33}} [])
+ (get-paths '{:keys [x y z]} [])
+ (get-paths '[a {x :x [y z] :yz :or {:yz [9 8]}}] [])
  )
+
+(debug-eval
+ (let [x 3 y 4] (+ x y))
+ (let [[x y] [3 4]] (+ x y))
+ (let [{x :x [y z] :yz} {:x 3 :yz [4 5]}] (+ x y))
+ (let [{x :x [y z] :yz :or {:yz [88 89]}} {:x 3}] (+ x y))
+ (let [{x :x [y z] :yz :or {:yz [88 89] :x 4}} {}] (+ x y))
+ (let [{:keys [x y]} {:x 7 :y 2}] (+ x y))
+ (let [{:keys [x y] :or {:x 7 :y 2}} {}] (+ x y))
+ )
+
+
 
 (comment debug-eval
  (destruct '[] [])
