@@ -96,7 +96,7 @@ def _keyword_Q(exp):
 
 # Functions
 def _function(Eval, Env, ast, env, params):
-    #print(f"DEFINIZIONE_FUNZIONE. ast={ast}")
+    #print(f"DEFINIZIONE_FUNZIONE. ast={ast} params={params} type(params)={type(params)} isinstance(params, Vector)={isinstance(params, Vector)}")
     if not isinstance(params, Vector):
         raise Exception("Function params should be Vectors")
     def fn(*args):
@@ -111,7 +111,7 @@ def _function_Q(f):
 
 
 def _multi_arity_function(Eval, Env, maf_dict, env):
-    print(f"_multi_arity_function. maf_dict={maf_dict}")
+    #print(f"_multi_arity_function. maf_dict={maf_dict}")
     def maf_dispatcher(args):
         n = len(args)
         if len(args) in maf_dict:
@@ -174,9 +174,11 @@ class Hash_Map(dict):
             return False
         return tuple(sorted(self.items())) == tuple(sorted(other.items()))
     def add_pair(self, key, value):
+        #print(f"Hash_Map.add_pair. key={key} value={value}")
         self[key] = value
 
 def _hash_map(*key_vals):
+    #print(f"_hash_map. key_vals={key_vals}")
     hm = Hash_Map()
     for i in range(0,len(key_vals),2): hm[key_vals[i]] = key_vals[i+1]
     return hm

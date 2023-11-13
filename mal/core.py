@@ -49,6 +49,11 @@ def get(hm, key, default=None):
             return hm[key]
         else:
             return default
+    elif types._string_Q(hm):
+        if key < len(hm):
+            return hm[key]
+        else:
+            return default
     elif hm is not None and key in hm:
         return hm.get(key)
     else:
@@ -81,7 +86,7 @@ def map_indexed(func, iterable):
 
 def nth(lst, idx):
     if idx < len(lst): return lst[idx]
-    else: throw("nth: index out of range")
+    else: throw(f"nth: index {idx} out of range in {lst}")
 
 def first(lst):
     if types._nil_Q(lst): return None
@@ -104,12 +109,12 @@ def last(lst):
     if types._hash_map_Q(lst): return list(lst.items())[-1]
     else: return lst[-1]
     
-def take(lst, n):    
+def take(n, lst):    
     if types._nil_Q(lst): return List([])
     if types._hash_map_Q(lst): return List(list(lst.items())[:n])
     else: return List(lst[:n])
 
-def drop(lst, n):    
+def drop(n, lst):    
    # print(f" drop impl. lst={lst} n={n}")
     if types._nil_Q(lst): return List([])
     if types._hash_map_Q(lst): return List(list(lst.items())[n:])
@@ -212,7 +217,7 @@ def join(arr, sep):
     result = sep.join(arr)
     return result
 
-def set(coll):
+def set(*coll):
     return types._hash_set(*coll)
         
 def get_in(m, ks, not_found=None):

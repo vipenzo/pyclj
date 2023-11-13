@@ -747,4 +747,275 @@ pyclj > (get-in [1 {:x 4 :y 5 :z [44 45]} 3] [1 [:z [66 67]] 1])
 45
 ```
 
-Ok, funziona tutto e direi che abbiamo la let. Ora potremmo implementare `fn` e `loop` e poi aggiungere le **trailing maps**
+Ok, funziona tutto e direi che abbiamo la let. Ora potremmo implementare `fn` e `loop` e poi aggiungere le **trailing maps** e `:as`
+## fn
+Un implementazione molto semplice della `fn` (solo per gestire il destructuring) potrebbe essere questa:
+```
+(defmacro fn [params & body]
+         `(fn* [& vals]
+               (let [[~@params] vals]
+                 (do ~@body))))
+```
+Ma non mi piace perchè farebbe diventare tutte le funzioni variadiche (anche quelle che non usano il destructuring)
+
+Implementata così:
+```
+(def make-p-v-list (fn* [params] (mapcat (fn* [n] [(params n) (symbol (str "val" n))]) (range (count params)))))
+(def make-v-list (fn* [params] (mapcat (fn* [n] [(symbol (str "val" n))]) (range (count params)))))
+
+(defmacro fn-- [params & body]
+  `(fn* [~@(make-v-list params)]
+        (let [~@(make-p-v-list params)]
+          (do ~@body))))
+```
+Funziona e non ha questo problema:
+```
+pyclj > ((fn-- [x y] (+ x y)) 3 4)
+7
+pyclj > ((fn-- [[x y]] (+ x y)) [3 4])
+7
+pyclj > (macroexpand (fn-- [[x y]] (+ x y)))
+(fn* [val0] (let [[x y] val0] (do (+ x y))))
+pyclj > (macroexpand (fn-- [a [x y]] (+ a x y)))
+(fn* [val0 val1] (let [a val0 [x y] val1] (do (+ a x y))))
+pyclj > ((fn-- [a [x y]] (+ a x y)) 5 [2 3])
+10
+```
+Ora però va integrata col multi-arity.
+Implementata così:
+```
+; Multi Arity Functions
+(defmacro fn+ [params & xs]
+  (if (every? list? (cons params xs))
+    (let* [make-pair (fn* [params-and-body]
+                      (let* [params (first params-and-body)
+                            body (rest params-and-body)
+                            variadic? (some (fn* [par] (= (str par) "&")) params )
+                            k (if variadic? -1 (count params))]
+                        [k [params `(do ~@body)]]))
+          maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+      `(fn** ~maf-dict))
+    `(fn-- ~params  ~@xs)))
+```
+Si ottiene una semi integrazione, nel senso che nel caso multi-arity non c'è destructuring, ma per le funzioni semplici c'è.
+Vorrei che ci fosse il destructuring, ma è più complesso: bisogna inserire parte del codice della `fn--` nel `maf-dict`.
+Potrebbe andare così:
+```
+(defmacro fn+ [params & xs]
+  (if (every? list? (cons params xs))
+    (let* [make-pair (fn* [params-and-body]
+                      (let* [params (first params-and-body)
+                            body (rest params-and-body)
+                            variadic? (some (fn* [par] (= (str par) "&")) params )
+                            k (if variadic? -1 (count params))]
+                        [k `[~@(make-v-list params) (let [~@(make-p-v-list params)]
+                                                      (do ~@body))]]))
+          maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+      `(fn** ~maf-dict))
+    `(fn-- ~params  ~@xs)))
+```
+Che sembra promettente, ma non funziona:
+```
+pyclj > (macroexpand (fn+ [x y] (+ x y)))
+(fn* [val0 val1] (let [x val0 y val1] (do (+ x y))))
+pyclj > (macroexpand (fn+ ([x y] (+ x y)) ([[x y]] (recur x y))  ) )
+(fn** {2 [val0 val1 (let [x val0 y val1] (do (+ x y)))] 1 [val0 (let [[x y] val0] (do (recur x y)))]})
+pyclj > ( (fn+ ([x y] (+ x y)) ([[x y]] (recur x y))) [3 4] )
+_multi_arity_function. maf_dict={2: ['val0', 'val1', ['let', ['x', 'val0', 'y', 'val1'], ['do', ['+', 'x', 'y']]]], 1: ['val0', ['let', [['x', 'y'], 'val0'], ['do', ['recur', 'x', 'y']]]]}
+Exception: 'val0' not found
+```
+Mancavano le `[]` intorno ai parametri, ora va:
+```
+(defmacro fn+ [params & xs]
+  (if (every? list? (cons params xs))
+    (let* [make-pair (fn* [params-and-body]
+                      (let* [params (first params-and-body)
+                            body (rest params-and-body)
+                            variadic? (some (fn* [par] (= (str par) "&")) params )
+                            k (if variadic? -1 (count params))]
+                        [k `[[~@(make-v-list params)] (let [~@(make-p-v-list params)]
+                                                      (do ~@body))]]))
+          maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+      `(fn** ~maf-dict))
+    `(fn-- ~params  ~@xs)))
+
+pyclj > (macroexpand (fn+ ([x y] (+ x y)) ([[x y]] (recur x y))  ) )
+(fn** {2 [[val0 val1] (let [x val0 y val1] (do (+ x y)))] 1 [[val0] (let [[x y] val0] (do (recur x y)))]})
+pyclj > ( (fn+ ([x y] (+ x y)) ([[x y]] (recur x y))) [3 4] )
+_multi_arity_function. maf_dict={2: [['val0', 'val1'], ['let', ['x', 'val0', 'y', 'val1'], ['do', ['+', 'x', 'y']]]], 1: [['val0'], ['let', [['x', 'y'], 'val0'], ['do', ['recur', 'x', 'y']]]]}
+7
+```
+Non sono molto sicuro dei variadic, bisogna fare un bel po' di test ...
+Infatti la gestione dei variadic è molto compromessa, anche nella `fn--`
+```
+pyclj > (macroexpand (fn+ ([& v] (apply + v)) ([[x y]] (recur x y))))
+(fn** {-1 [[val0 val1] (let [& val0 v val1] (do (apply + v)))] 1 [[val0] (let [[x y] val0] (do (recur x y)))]})
+pyclj > (macroexpand (fn-- [& v] (apply + v)))
+(fn* [val0 val1] (let [& val0 v val1] (do (apply + v))))
+pyclj > 
+```
+
+Cos' va:
+```
+(defmacro fn+ [params & xs]
+  (if (every? list? (cons params xs))
+    (let* [make-pair (fn* [params-and-body]
+                      (let* [params (first params-and-body)
+                            body (rest params-and-body)
+                            vp (split-variadic params)
+                            variadic-param (first vp)
+                            fixed-params (second vp)
+                            v-list (make-v-list fixed-params)
+                            v-list (if variadic-param (vec (concat v-list ['& variadic-param])) v-list) 
+                            k (if variadic-param -1 (count params))]
+                        [k `[~v-list (let [~@(make-p-v-list fixed-params)]
+                                                      (do ~@body))]]))
+          maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
+      `(fn** ~maf-dict))
+    `(fn-- ~params  ~@xs)))
+```
+
+Corretto ancora qualcosa, e messo un po' in forma la mini test framework.
+Importato qualche test da clojurescript, tolti i *testing*, che non ho ancora implementato.
+Ora *destructuring_tests.clj è questo:
+```
+(deftest test-destructuring
+  (is (= [2 1] (let [[a b] [1 2]] [b a])))
+  (is (= #{1 2} (let [[a b] [1 2]] #{a b})))
+  (is (= [1 2] (let [{a :a b :b} {:a 1 :b 2}] [a b])))
+  (is (= [1 2] (let [{:keys [a b]} {:a 1 :b 2}] [a b])))
+  (is (= [1 2 [1 2]] (let [[a b :as v] [1 2]] [a b v])))
+  (is (= [1 42] (let [{:keys [a b] :or {b 42}} {:a 1}] [a b])))
+  (is (= [1 nil] (let [{:keys [a b] :or {c 42}} {:a 1}] [a b])))
+  (is (= [2 1] (let [[a b] '(1 2)] [b a])))
+  (is (= {1 2} (let [[a b] [1 2]] {a b})))
+  (is (= [2 1] (let [[a b] (seq [1 2])] [b a])))
+  (let [{:keys [:a :b]} {:a 1 :b 2}]
+    (is (= 1 a))
+    (is (= 2 b))))
+```
+e se eseguo i test viene fuori questo:
+```
+pyclj > (load-file "./tests/destructuring_tests.clj")
+./tests/destructuring_tests.clj
+pyclj > (run-test test-destructuring)
+-  {:type :pass :message nil :expected (= [2 1] (let [[a b] [1 2]] [b a])) :actual true}
+-  {:type :pass :message nil :expected (= (set 1 2) (let [[a b] [1 2]] (set a b))) :actual true}
+-  {:type :pass :message nil :expected (= [1 2] (let [{a :a b :b} {:a 1 :b 2}] [a b])) :actual true}
+-  {:type :pass :message nil :expected (= [1 2] (let [{:keys [a b]} {:a 1 :b 2}] [a b])) :actual true}
+-  {:type :fail :message nil :expected (= [1 2 [1 2]] (let [[a b :as v] [1 2]] [a b v])) :actual false}
+-  {:type :fail :message nil :expected (= [1 42] (let [{:keys [a b] :or {b 42}} {:a 1}] [a b])) :actual false}
+-  {:type :pass :message nil :expected (= [1 nil] (let [{:keys [a b] :or {c 42}} {:a 1}] [a b])) :actual true}
+-  {:type :pass :message nil :expected (= [2 1] (let [[a b] (quote (1 2))] [b a])) :actual true}
+-  {:type :fail :message nil :expected (= {1 2} (let [[a b] [1 2]] {a b})) :actual false}
+-  {:type :pass :message nil :expected (= [2 1] (let [[a b] (seq [1 2])] [b a])) :actual true}
+-  {:type :error :message nil :expected (= 1 a) :actual {'err': Exception("'a' not found"), 'a1': ['let', ['value__', ['=', 1, 'a']], ['if', 'value__', ['do-report', {'ʞtype': 'ʞpass', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 1, 'a']], 'ʞactual': 'value__'}], ['do-report', {'ʞtype': 'ʞfail', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 1, 'a']], 'ʞactual': 'value__'}]]], 'ast_info': [['a', ['./tests/destructuring_tests.clj', (13, 10)]], [['=', 1, 'a'], ['./tests/destructuring_tests.clj', (13, 2)]], [['let*', ['value__', ['=', 1, 'a']], ['do', ['if', 'value__', ['do-report', {'ʞtype': 'ʞpass', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 1, 'a']], 'ʞactual': 'value__'}], ['do-report', {'ʞtype': 'ʞfail', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 1, 'a']], 'ʞactual': 'value__'}]]]], None]], 'python_traceback': 'Traceback (most recent call last):\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 165, in EVAL\n    return EVAL(a1, env)\n           ^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 116, in EVAL\n    let_env.set(a1[i], EVAL(a1[i+1], let_env))\n                       ^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 224, in EVAL\n    el = eval_ast(ast, env)\n         ^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 71, in eval_ast\n    return types._list(*map(lambda a: EVAL(a, env), ast))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 71, in <lambda>\n    return types._list(*map(lambda a: EVAL(a, env), ast))\n                                      ^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 91, in EVAL\n    return eval_ast(ast, env)\n           ^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 69, in eval_ast\n    return env.get(ast)\n           ^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/env.py", line 33, in get\n    raise Exception("\'" + key + "\' not found")\nException: \'a\' not found\n'}}
+-  {:type :error :message nil :expected (= 2 b) :actual {'err': Exception("'b' not found"), 'a1': ['let', ['value__', ['=', 2, 'b']], ['if', 'value__', ['do-report', {'ʞtype': 'ʞpass', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 2, 'b']], 'ʞactual': 'value__'}], ['do-report', {'ʞtype': 'ʞfail', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 2, 'b']], 'ʞactual': 'value__'}]]], 'ast_info': [['b', ['./tests/destructuring_tests.clj', (14, 10)]], [['=', 2, 'b'], ['./tests/destructuring_tests.clj', (14, 2)]], [['let*', ['value__', ['=', 2, 'b']], ['do', ['if', 'value__', ['do-report', {'ʞtype': 'ʞpass', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 2, 'b']], 'ʞactual': 'value__'}], ['do-report', {'ʞtype': 'ʞfail', 'ʞmessage': None, 'ʞexpected': ['quote', ['=', 2, 'b']], 'ʞactual': 'value__'}]]]], None]], 'python_traceback': 'Traceback (most recent call last):\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 165, in EVAL\n    return EVAL(a1, env)\n           ^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 116, in EVAL\n    let_env.set(a1[i], EVAL(a1[i+1], let_env))\n                       ^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 224, in EVAL\n    el = eval_ast(ast, env)\n         ^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 71, in eval_ast\n    return types._list(*map(lambda a: EVAL(a, env), ast))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 71, in <lambda>\n    return types._list(*map(lambda a: EVAL(a, env), ast))\n                                      ^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 91, in EVAL\n    return eval_ast(ast, env)\n           ^^^^^^^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/interpreter.py", line 69, in eval_ast\n    return env.get(ast)\n           ^^^^^^^^^^^^\n  File "/Users/vipenzo/Documents/Progetti/Blender/pyclj/mal/env.py", line 33, in get\n    raise Exception("\'" + key + "\' not found")\nException: \'b\' not found\n'}}
+nil
+```
+
+Il primo fail riguarda il fatto che non ho implementato `:as` `(= [1 2 [1 2]] (let [[a b :as v] [1 2]] [a b v]))`
+Il secondo il fatto che la `:or` deve fare un merge. `(= [1 42] (let [{:keys [a b] :or {b 42}} {:a 1}] [a b]))`
+Il terzo non lo capisco. Torna `{a 2}` invece di `{1 2}`. Da debuggare. `(= {1 2} (let [[a b] [1 2]] {a b}))`
+L'ultimo è un errore che deriva dal fatto che probabilmente ho capito male come deve funzionare la :keys.
+Questo `(let [{:keys [a b]} {:a 1 :b 2}] [a b])` funziona, ma a quanto pare deve funzionare questo: `(let [{:keys [:a :b]} {:a 1 :b 2}] [a b])`. O meglio, devono funzionare tutti e due (in clojure è così).
+
+Comincio dalla `:as`.
+La `take` e la `drop` avevano i parametri al contrario. Corretti.
+Aggiunta la `:as` ai sequential. E sembra andare:
+```
+pyclj > (let [[a b & c :as v] [1 2 3 4]] [a b c v])
+[1 2 (3 4) [1 2 3 4]]
+```
+Aggiunta la `:as` anche alle associative, e sembra andare:
+```
+pyclj > (let [{x :x :as all} {:x 2 :y 3}] [x all])
+[2 {:x 2 :y 3}]
+```
+Bene, vediamo il problema dell'`:or`.
+Questo: 
+```
+pyclj > (let [{:keys [a b] :or {:b 42}} {:a 1}] [a b])
+[1 42]
+```
+Funziona. Quindi il problema è che non accetta `:or {b 42}` (ha il problema inverso delle `:keys`, bisogna in entrambi i casi accettare sia simboli che keywords).
+O no ?
+In clojure viene fuori questo:
+```
+user=> (let [{:keys [a b] :or {:b 42}} {:a 1}] [a b])
+Syntax error macroexpanding clojure.core/let at (REPL:1:1).
+:b - failed: simple-symbol? at: [:bindings :form :map-destructure :or 0] spec: :clojure.core.specs.alpha/or
+{:keys [a b], :or {:b 42}} - failed: simple-symbol? at: [:bindings :form :local-symbol] spec: :clojure.core.specs.alpha/local-name
+{:keys [a b], :or {:b 42}} - failed: vector? at: [:bindings :form :seq-destructure] spec: :clojure.core.specs.alpha/seq-binding-form
+user=> (let [{:keys [a b] :or {b 42}} {:a 1}] [a b])
+[1 42]
+user=> (let [{:keys [:a :b] :or {b 42}} {:a 1}] [a b])
+[1 42]
+user=> (let [{:keys [:a :b] :or {:b 42}} {:a 1}] [a b])
+Syntax error macroexpanding clojure.core/let at (REPL:1:1).
+:b - failed: simple-symbol? at: [:bindings :form :map-destructure :or 0] spec: :clojure.core.specs.alpha/or
+{:keys [:a :b], :or {:b 42}} - failed: simple-symbol? at: [:bindings :form :local-symbol] spec: :clojure.core.specs.alpha/local-name
+{:keys [:a :b], :or {:b 42}} - failed: vector? at: [:bindings :form :seq-destructure] spec: :clojure.core.specs.alpha/seq-binding-form
+user=>
+```
+in pratica `:keys` accetta sia simboli che keyword, mentre `:or` accetta solo simboli. Che strano.
+Inoltre non funziona questo:
+```
+user=> (let [{(let [{:keys ["a" :b] :or {b 42}} {:a 1}] [a b])
+Syntax error macroexpanding clojure.core/let at (REPL:1:1).
+"a" - failed: ident? at: [:bindings :form :map-destructure :keys] spec: :clojure.core.specs.alpha/keys
+{:keys ["a" :b], :or {b 42}} - failed: simple-symbol? at: [:bindings :form :local-symbol] spec: :clojure.core.specs.alpha/local-name
+{:keys ["a" :b], :or {b 42}} - failed: vector? at: [:bindings :form :seq-destructure] spec: :clojure.core.specs.alpha/seq-binding-form
+```
+che invece io avrei reso possibile se sequivo la prima cosa che mi è venuta in mente (chiamare `(keyword sym)` intorno a ogni *key*).
+Mi sa che faccio lo stesso così, e lascio aperte tutte le possibilità (compresa `:or {:b 42}`)
+No, ho capito meglio:
+```
+user=> (let [{(let [{a :a b :b :or {b 42}} {:a 1}] [a b])
+[1 42]
+user=> (let [{(let [{a :a pippo :b :or {b 42}} {:a 1}] [a pippo])
+[1 nil]
+user=> (let [{(let [{a :a pippo :b :or {pippo 42}} {:a 1}] [a pippo])
+[1 42]
+```
+la hash-map passata alla `:or` fa riferimento ai simboli, non alle keys della mappa da destrutturare. Mi sembra una scelta del menga.
+Infatti in clojure non funziona (e non può funzionare) questo: `(let [{x :x [y z] :yz :or {:yz [88 89]}} {:x 3}] (+ x y))`, mi sa che per il momento lascio la mia implementazione. Gli :or usano le keyword, e le :keys no.
+
+Alla fine, fatte le dovute correzioni ai test rimane solo questa che non funziona:
+```
+pyclj > (let [[a b] [1 2]] {a b})
+{a 2}
+```
+In clojure torna {1 2}.
+Mettendo un vettore funziona anche a me:
+```
+pyclj > (let [[a b] [1 2]] [a b])
+[1 2]
+```
+Quindi il problema non è strettamente legato al destructuring. È un problema che ha la `let*`
+```
+pyclj > (let [a 1 b 2] [a b])
+[1 2]
+pyclj > (let [a 1 b 2] {a b})
+{a 2}
+pyclj > (let* [a 1 b 2] {a b})
+{a 2}
+```
+Sembra non faccia l'eval delle key di un'hash-map.
+L'ho aggiunta a `eval_ast`, nell'interprete.
+```
+    elif types._hash_map_Q(ast):
+        return types.Hash_Map((EVAL(k, env), EVAL(v, env)) for k, v in ast.items())
+ ```
+Ora va:
+```
+pyclj > (let [[a b] [1 2]] {a b})
+{1 2}
+```
+Ma ho un vago ricordo di aver letto qualcosa a riguardo nelle note del *mal*. Boh, se dà problemi da qualche parte ci ritorno.
+## loop
+Credo si possa passare a implementare il destructuring nella `loop`. Dovrebbe essere identico a `let`.
+
+
+
+

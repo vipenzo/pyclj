@@ -206,7 +206,7 @@ def read_hash_map(reader):
 
 def read_hash_set(reader):
     lst = read_sequence(reader, _list, '#{', '}')
-    print(f"read_hash_set. lst={lst}")
+    #print(f"read_hash_set. lst={lst}")
     res =  _list(make_symbol('set', reader)).__add__(lst)
     set_coords(res, reader)
     return res

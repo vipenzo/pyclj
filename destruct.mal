@@ -1,115 +1,4 @@
-(comment def let< (fn* [binding-vector & body]
-               (do
-                 (println "let< binding-vector=" binding-vector)
-                 (eval (apply list
-                              'let*
-                              (->> binding-vector
-                                   (partition 2)
-                                   (mapcat (fn* [bindings] (destruct (first bindings) (second bindings))))
-                                   vec)
-                              (list (cons 'do body)))))))
-
-(comment defmacro let [binding-vector & body]
-  (apply list 
-         'let<
-         (->> binding-vector
-              (partition 2)
-              (mapcat (fn* [bindings] (vector `~(first bindings) (second bindings)))))
-         (list `(quote ~@body))))
   
-
-(comment debug-eval
- (let* [AA [1 {:x 2 :y [3 4]}]
-        a (get-in AA [0])
-        x (get-in AA [1 :x])
-        c (get-in AA [1 :y 0])
-        d (get-in AA [1 :y 1])
-        ]
-       [a x c d])
- )
-
-(def bindings '[a {x :x [c d] :y}])
-(def values [1 {:x 2 :y [3 4]}])
-
-(def get-paths-sequential)
-(def get-paths-associative)
-(def get-paths (fn* [bindings current-path]
-                 (when bindings
-                   (cond (sequential? bindings)
-                         (get-paths-sequential bindings current-path)
-                 
-                         (map? bindings)
-                         (get-paths-associative bindings current-path)
-                 
-                         :else
-                         [ [bindings current-path]]))))
-
-(def get-paths-sequential (fn* [binding-seq current-path]
-                               (do
-                                 (def variadic? (fn* [bindings]
-                                                     (and (>= (count bindings) 2) (= '& (nth bindings (- (count bindings) 2))))))
-                                 (if (variadic? binding-seq)
-                                   (let* [n-fixed-values (- (count binding-seq) 2)
-                                         variadic-sym (last binding-seq)
-                                         binding-seq (take binding-seq n-fixed-values)]
-                                     (conj  (vec (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq))  [variadic-sym [(negate n-fixed-values)]]))
-                                   (vec (apply concat (map-indexed (fn* [i b] (get-paths b (conj current-path i))) binding-seq)))))))
-                            
-(def get-paths-associative (fn* [binding-map current-path]
-                                (let* [default-map (get binding-map :or)
-                                       keys-bindings (get binding-map :keys)
-                                       binding-map (if keys-bindings
-                                                     (apply hash-map (interleave keys-bindings
-                                                                                 (map keyword keys-bindings)))
-                                                     binding-map)
-                                       binding-map (if default-map (dissoc binding-map :or) binding-map)
-                                       ks (keys binding-map)
-                                       vs (vals binding-map)
-                                       f-get-path (fn* [k v]
-                                                    (if (contains? default-map v)
-                                                      (get-paths k (conj current-path [v (default-map v)])) 
-                                                      (get-paths k (conj current-path v))))]
-                                      (vec (apply concat (map f-get-path ks vs))))))
-
-(def butlast (fn* [coll]
-               (take (- (count coll) 1) coll)))
-
-(def make-let-bindings (fn* [sym-path-def value]
-                            (do
-                              (println "make-let-bindings sym-path-def=" sym-path-def " value=" value)
-                              (let* [sym (first sym-path-def)
-                                     path (second sym-path-def)
-                                     default (get-in sym-path-def [2])]
-                                    (if (empty? path)
-                                      [sym value]
-                                      (if (and (number? (last path)) (< (last path) 0))
-                                        (list sym (list 'drop (list 'get-in value (butlast path)) (negate (last path))))
-                                        (if default
-                                          (list sym (list 'get-in value path default))
-                                          (list sym (list 'get-in value path)))))))))
-                         
-
-(defmacro let [binding-vector & body]
-  (apply list
-         'let*
-         (->> binding-vector
-              (partition 2)
-              (mapcat (fn* [bindings]
-                           (if (symbol? (first bindings))
-                             [(first bindings) (second bindings)]
-                             (mapcat (fn* [b] (make-let-bindings b (second bindings)))
-                                     (get-paths (first bindings) [])))))
-              vec)
-         (list (cons 'do body))))
-
-(def binding-vector '[[x y] [3 4]])
-(def bindings (nth (partition 2 binding-vector) 0))
-(def paths (get-paths (first bindings) []))
-(def sym-path-def (nth paths 0))
-(def sym (first sym-path-def))
-(def path (second sym-path-def))
-;(def default (nth sym-path-def 2))
-;(def leave (last path))
 
 
 (debug-eval
@@ -133,9 +22,15 @@
  (let [{x :x [y z] :yz :or {:yz [88 89] :x 4}} {}] (+ x y))
  (let [{:keys [x y]} {:x 7 :y 2}] (+ x y))
  (let [{:keys [x y] :or {:x 7 :y 2}} {}] (+ x y))
+ (let [[a & v] [1 2 3]] (- (apply + v) a))
  )
 
+(debug-eval
+ ((fn ([x y] (+ x y)) ([[x y]] (recur x y))) [3 4])
+ ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4])
+ ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4 5])
 
+ )
 
 (comment debug-eval
  (destruct '[] [])
@@ -179,24 +74,6 @@
  (let [list-of-things (range 10)]
    list-of-things))
 
-(comment def mmlet (fn* [bindings & body]
-                `(let* [~@bindings] ~@body)))
-
-
-(comment defmacro mlet [bindings & body]
-  (mmlet ~bindings ~@body))
-
-(comment defmacro fn-- [params & body]
-  `(fn* [& vals]
-        (mmlet (mapcat (fn* [b v] (destruct b v)) '[~@params] vals)
-               (do ~@body))))
-
-
-(comment defmacro fn-- [params & body]
-         `(fn* [& vals]
-               (let [[~@params] vals]
-                 (do ~@body))))
-
 ; Multi Arity Functions
 (comment defmacro fn+ [params & xs]
   (if (every? list? (cons params xs))
@@ -212,14 +89,5 @@
 
 
 
-(comment defmacro fn-- [params & body]
-  `(fn* [& args]
-        (let [~@params args]
-          (do ~@body))))
-
-
-(comment debug-eval
-         (def prova (fn+ [[x y]] (+ x y)))
-         (prova [3 4]))
 
 

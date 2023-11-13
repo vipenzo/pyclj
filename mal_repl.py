@@ -6,7 +6,6 @@ from mal.stepA_mal import Env,core,types,sys,mal_readline,reader,printer,traceba
 repl_env = Env()
 def REP(str):
     return PRINT(EVAL(READ(str), repl_env))
-
 # core.py: defined using python
 for k, v in core.ns.items(): repl_env.set(types._symbol(k), v)
 repl_env.set(types._symbol('eval'), lambda ast: EVAL(ast, repl_env))

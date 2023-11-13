@@ -12,24 +12,29 @@ def READ(str):
 
 # eval
 def qq_loop(acc, elt):
+    #print(f"qq_loop. acc={acc} elt={elt}")
     if types._list_Q(elt) and len(elt) == 2 and elt[0] == u'splice-unquote':
         return types._list(types._symbol(u'concat'), elt[1], acc)
     else:
         return types._list(types._symbol(u'cons'), quasiquote(elt), acc)
 
 def qq_foldr(seq):
+    #print(f"qq_foldr. seq={seq}")
     return functools.reduce(qq_loop, reversed(seq), types._list())
 
 def quasiquote(ast):
+    #print(f"quasiquote. ast={ast}")
     if types._list_Q(ast):
         if len(ast) == 2 and ast[0] == u'unquote':
             return ast[1]
         else:
             return qq_foldr(ast)
-    elif types._hash_map_Q(ast) or types._symbol_Q(ast):
+    elif types._symbol_Q(ast):
         return types._list(types._symbol(u'quote'), ast)
     elif types._vector_Q (ast):
         return types._list(types._symbol(u'vec'), qq_foldr(ast))
+    elif types._hash_map_Q (ast):
+        return types._list(types._symbol(u'apply'), types._symbol(u'hash-map'), types._list(types._symbol(u'vec'), qq_foldr([el for pair in ast.items() for el in pair])))
     else:
         return ast
 
@@ -67,7 +72,7 @@ def eval_ast(ast, env):
     elif types._vector_Q(ast):
         return types._vector(*map(lambda a: EVAL(a, env), ast))
     elif types._hash_map_Q(ast):
-        return types.Hash_Map((k, EVAL(v, env)) for k, v in ast.items())
+        return types.Hash_Map((EVAL(k, env), EVAL(v, env)) for k, v in ast.items())
     else:
         return ast  # primitive value, return unchanged
 
