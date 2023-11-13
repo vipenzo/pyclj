@@ -194,7 +194,7 @@
 
 (defmacro ->>
   [x & xs]
-  (loop [x x, forms xs]
+  (loop* [x x, forms xs]
     (if forms
       (let* [form (first forms)
             threaded (if (list? form)
@@ -281,6 +281,16 @@
                                      (get-paths (first bindings) [])))))
               vec)
          (list (cons 'do body))))
+
+(defmacro loop [bindings & xs] 
+  (let* [pairs (vec (partition 2 bindings))
+         loop-bindings (vec (map first pairs))
+         values (vec (map second pairs))
+         names (vec (map (fn* [i] (symbol (str "val" i))) (range (count loop-bindings))))]
+        `(loop* [~@(mapcat (fn* [n v] [n v]) names values)]
+           (let [~@(mapcat (fn* [n v] [n v]) loop-bindings names)]
+             (do ~@xs)))))
+  
 
 ; Destructure fn
 (def make-v-pv-list (fn* [params]

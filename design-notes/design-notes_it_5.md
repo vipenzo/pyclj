@@ -1015,6 +1015,33 @@ pyclj > (let [[a b] [1 2]] {a b})
 Ma ho un vago ricordo di aver letto qualcosa a riguardo nelle note del *mal*. Boh, se dà problemi da qualche parte ci ritorno.
 ## loop
 Credo si possa passare a implementare il destructuring nella `loop`. Dovrebbe essere identico a `let`.
+No, non è uguale alla `let`.
+Il problema è che sulla `recur` il destructuring non viene più applicato. È necessario che il destructuring venga fatto nel body.
+
+Così:
+```
+(defmacro loop [bindings & xs] 
+  (let* [pairs (vec (partition 2 bindings))
+         loop-bindings (vec (map first pairs))
+         values (vec (map second pairs))
+         names (vec (map (fn* [i] (symbol (str "val" i))) (range (count loop-bindings))))]
+        `(loop* [~@(mapcat (fn* [n v] [n v]) names values)]
+           (let [~@(mapcat (fn* [n v] [n v]) loop-bindings names)]
+             (do ~@xs)))))
+```
+Sembra funzionare:
+```
+pyclj > (loop [[x y] [1 2] z 3] (println x y z) (if (< y 0) x (recur [(inc x) (dec y)] (* 3 z))))
+1 2 3
+2 1 9
+3 0 27
+4 -1 81
+4
+```
+
+Tutti questi "val0" "val1" .... che sto mettendo rischiano di collidere coi nomi utente ? Forse no, se vengono fuori problemi ci ritorno. Clojure ha qualche meccanismo per generare nomi temporanei ma non lo conosco bene, qualcosa con `#` alla fine, magari indago.
+
+Per ora passerei alle **trailing maps**
 
 
 
