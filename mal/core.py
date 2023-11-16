@@ -120,11 +120,12 @@ def drop(n, lst):
     if types._hash_map_Q(lst): return List(list(lst.items())[n:])
     else: return List(lst[n:])
 
-def apply(f, *args): return f(*(list(args[0:-1])+args[-1]))
+def apply(f, *args): return f(*(List(args[0:-1])+args[-1]))
 
-def mapf(f, *lst): return List(map(f, *lst))
+def mapf(f, *lst): 
+    return List(map(f, *lst))
 
-def range_(start, end, step): return list(range(start,end,step))
+def range_(start, end, step): return List(range(start,end,step))
 
 def select_keys(dict, keys_list): return {k: dict[k] for k in keys_list if k in dict}
 
@@ -179,9 +180,13 @@ def seq(obj):
         return List(obj) if len(obj) > 0 else None
     elif types._string_Q(obj):
         return List([c for c in obj]) if len(obj) > 0 else None
+    elif types._hash_map_Q(obj):
+        return List(obj.items()) if len(obj) > 0 else None
+    elif types._hash_set_Q(obj):
+        return List(obj) if len(obj) > 0 else None
     elif obj == None:
         return None
-    else: throw ("seq: called on non-sequence")
+    else: throw (f"seq: called on non-sequence. {obj} - {type(obj)}")
 
 
 # Metadata functions
@@ -304,7 +309,7 @@ ns = {
         'drop':drop,
         'last': last,
         'apply': apply,
-        'map': mapf,
+        'map*': mapf,
         'partition': partition,
 
         'conj': conj,

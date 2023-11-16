@@ -252,7 +252,7 @@ def EVAL(ast, env):
                 #print(f"old ast_info:{exc.__ast_info__}")
                 exc.__ast_info__.append(ast_info)
             else:
-                exc.__ast_info__ = [ast_info]
+                exc.__ast_info__ = types._list(ast_info)
             raise
 
 # print

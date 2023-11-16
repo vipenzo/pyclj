@@ -1042,7 +1042,193 @@ pyclj > (loop [[x y] [1 2] z 3] (println x y z) (if (< y 0) x (recur [(inc x) (d
 Tutti questi "val0" "val1" .... che sto mettendo rischiano di collidere coi nomi utente ? Forse no, se vengono fuori problemi ci ritorno. Clojure ha qualche meccanismo per generare nomi temporanei ma non lo conosco bene, qualcosa con `#` alla fine, magari indago.
 
 Per ora passerei alle **trailing maps**
+## Keyword arguments
+Partiamo dagli esempi di [questo](https://clojure.org/guides/destructuring) articolo: 
 
+Questa: 
+``` 
+(defn configure [val options]
+   (let [{:keys [debug verbose] :or {:debug false, :verbose false}} options]
+     (str "val = " val " debug = " debug " verbose = "  verbose)))
+(configure 12 {:debug true})
+```
+ovviamente funziona e torna `val = 12 debug = true verbose = false`.
+Ma questa: `(configure 12 :debug true)` dà errore.
+Bisogna, da qualche parte, riconoscere che gli ultimi elementi del binding sono **coppie keyword-valore** e raccoglierle in una hash-map.
 
+Potrebbe essere una cosa del genere:
+```
+(def compact-key-val-trailing-pairs (fn* [vals]
+                                         (loop* [vals vals
+                                                 hm {}
+                                                 resvals []
+                                                 k nil
+                                                 has-kv-pair? false]
+                                                (cond
+                                                  (and (< (count vals) 1) k)  (throw "Odd number of trailing key-value pairs")
+                                                  (empty? vals) (if (empty? hm) resvals (conj resvals hm))
+                                                  (keyword? (first vals)) (recur (rest vals) hm resvals (first vals) true)
+                                                  k (recur (rest vals) (assoc hm k (first vals)) resvals nil has-kv-pair?)
+                                                  (map? (first vals)) (recur (rest vals) (merge hm (first vals)) resvals nil has-kv-pair?)
+                                                  has-kv-pair? (throw "Non trailing key-value pairs")
+                                                  (empty? hm) (recur (rest vals) {} (conj resvals (first vals)) nil false)
+                                                  true (recur (rest vals) {} (conj resvals hm (first vals)) nil false)))))
+```
+Ma mi manca la `merge`
+Ho provato a prenderla dal sorgente di clojure, ma non ho la reduce1.
+Provando a giocarci vedo che la mia `map` non funziona sulle hash-maps:
+```
+pyclj > (map (fn [v] (do (println v) v)) {:a 1 :b 2})
+:a
+:b
+(:a :b)
+```
+Mentre in clojure:
+```
+user=> (map (fn [v] (do (println v) v)) {:a 1 :b 2})
+([:a 1]
+[:b 2]
+[:a 1] [:b 2])
+```
+(fa un po' cagare anche clojure nella print)
 
+Rivedo la mia `map`.
+Ok, map funziona e la `compact-key-val-trailing-pairs` sembra fare quello che deve:
+```
+code:  (compact-key-val-trailing-pairs (quote [])) 
+    -->  []
+code:  (compact-key-val-trailing-pairs (quote [:a 1])) 
+    -->  [{:a 1}]
+code:  (compact-key-val-trailing-pairs (quote [23 :a 1])) 
+    -->  [23 {:a 1}]
+code:  (compact-key-val-trailing-pairs (quote [23 {:A 3 :B 27} 41 {:b 33 :c 44} :a 1])) 
+    -->  [23 {:A 3 :B 27} 41 {:b 33 :c 44 :a 1}]
+```
+Ora dobbiamo vedere come usarla. A questo punto ho, anzitutto, il dubbio se clojure applichi questo meccanismo solo alle `fn` o in generale a tutti i casi di destructuring. Provo.
+Direi che lo fa dovunque c'è destructuring:
+```
+user=> (let [[val & {:keys [a b] :or {a 1 b 2} :as opts}] [21 :a 1]] [a opts])
+[1 {:a 1}]
+```
+... ma è molto più semplice di quanto credevo: si applica solo ai variadic.
+## Rewind
+Alla fine veniva un po' troppo complicata la gestione dei trailing maps.
+Ho modificato il tutto in modo che la get-paths (rinominata `get-r-paths`) non torni più dei paths da dare in pasto alla `get-in` ma direttamente il codice che sarà usato nella `let`.
+Inoltre nei vari passaggi vengono prodotte le coppie nome-valore relative ad ogni passo di destructuring. Nel caso sia preente l'`:as` il nome è quello dato dall'utente, se questo non è presente viene usato un nome autogenerato.
+Ad esempio, `(let [[x y] [3 4]] (+ x y))` produce: `(let* [__as_1 [3 4] x (nth __as_1 0) y (nth __as_1 1)] (do (+ x y))`
+mentre, se si aggiunge l'`:as`, come in `(let [[x y :as xv_vector] [3 4]] (+ x y)))` il codice prodotto diventa: `(let* [xv_vector [3 4] x (nth xv_vector 0) y (nth xv_vector 1)] (do (+ x y)))`
 
+Così sembrano passare tutti i test:
+```
+code:  (get-r-paths-sequential (quote [a b c]) (quote pippo) 3) 
+    -->  [[__as_3 pippo] [a (nth __as_3 0)] [b (nth __as_3 1)] [c (nth __as_3 2)]]
+code:  (get-r-paths-associative (quote {x :x y :y}) (quote pippo) 3) 
+    -->  [[__as_3 pippo] [x (get __as_3 :x)] [y (get __as_3 :y)]]
+code:  (get-r-paths (quote x) (quote pippo) 5) 
+    -->  [[x pippo]]
+code:  (get-r-paths (quote [a {b :x}]) (quote foo) 0) 
+    -->  [[__as_1 foo] [a (nth __as_1 0)] [__as_3 (nth __as_1 1)] [b (get __as_3 :x)]]
+code:  (get-r-paths (quote [a {[b c] :x}]) (quote foo) 0) 
+    -->  [[__as_1 foo] [a (nth __as_1 0)] [__as_3 (nth __as_1 1)] [__as_5 (get __as_3 :x)] [b (nth __as_5 0)] [c (nth __as_5 1)]]
+code:  (get-r-paths (quote {[a {[b c] :x}] :z e :e}) (quote foo) 0) 
+    -->  [[__as_1 foo] [__as_3 (get __as_1 :z)] [a (nth __as_3 0)] [__as_5 (nth __as_3 1)] [__as_7 (get __as_5 :x)] [b (nth __as_7 0)] [c (nth __as_7 1)] [e (get __as_1 :e)]]
+code:  (get-r-paths (quote [a b & c]) (quote foo) 0) 
+    -->  [[__as_1 foo] [a (nth __as_1 0)] [b (nth __as_1 1)] [c (drop 2 __as_1)]]
+code:  (get-r-paths (quote {x :x y :y :or {:y 33}}) (quote foo) 0) 
+    -->  [[__as_1 foo] [x (get __as_1 :x)] [y (get __as_1 :y 33)]]
+code:  (get-r-paths (quote {:keys [x y z]}) (quote foo) 0) 
+    -->  [[__as_1 foo] [x (get __as_1 :x)] [y (get __as_1 :y)] [z (get __as_1 :z)]]
+code:  (get-r-paths (quote [a {x :x [y z] :yz :or {:yz [9 8]}}]) (quote foo) 0) 
+    -->  [[__as_1 foo] [a (nth __as_1 0)] [__as_3 (nth __as_1 1)] [x (get __as_3 :x)] [__as_5 (get __as_3 :yz [9 8])] [y (nth __as_5 0)] [z (nth __as_5 1)]]
+code:  (let [x 3 y 4] (+ x y)) 
+    -->  7
+code:  (let [[x y] [3 4]] (+ x y)) 
+    -->  7
+code:  (let [{x :x [y z] :yz} {:x 3 :yz [4 5]}] (+ x y)) 
+    -->  7
+code:  (let [{x :x [y z] :yz :or {:yz [88 89]}} {:x 3}] (+ x y)) 
+    -->  91
+code:  (let [{x :x [y z] :yz :or {:yz [88 89] :x 4}} {}] (+ x y)) 
+    -->  92
+code:  (let [{:keys [x y]} {:x 7 :y 2}] (+ x y)) 
+    -->  9
+code:  (let [{:keys [x y] :or {:x 7 :y 2}} {}] (+ x y)) 
+    -->  9
+code:  (let [[a & v] [1 2 3]] (- (apply + v) a)) 
+    -->  4
+code:  (let [[x {a :a b :b :as y} & {:keys [o1 o2] :as v}] [3 {:a 32 :b 44} :o1 5 :o2 6]] [x a b y o1 o2 v]) 
+    -->  [3 32 44 {:a 32 :b 44} 5 6 {:o1 5 :o2 6}]
+code:  ((fn ([x y] (+ x y)) ([[x y]] (recur x y))) [3 4]) 
+    -->  7
+code:  ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4]) 
+    -->  7
+code:  ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4 5]) 
+    -->  7
+code:  (destruct (quote []) []) 
+    -->  [[__as_1 []]]
+code:  (destruct (quote [a b c]) [1 2 3]) 
+    -->  [[__as_1 [1 2 3]] [a (nth __as_1 0)] [b (nth __as_1 1)] [c (nth __as_1 2)]]
+code:  (destruct (quote [a b c & cs]) (range 10)) 
+    -->  [[__as_1 (0 1 2 3 4 5 6 7 8 9)] [a (nth __as_1 0)] [b (nth __as_1 1)] [c (nth __as_1 2)] [cs (drop 3 __as_1)]]
+code:  (destruct (quote {a :a b :b c :c}) {:a 1 :b 2 :c 3}) 
+    -->  [[__as_1 {:a 1 :b 2 :c 3}] [a (get __as_1 :a)] [b (get __as_1 :b)] [c (get __as_1 :c)]]
+code:  (destruct (quote {a :a b :b [x y & zs] :c}) {:a 1 :b 2 :c (range 10)}) 
+    -->  [[__as_1 {:a 1 :b 2 :c (0 1 2 3 4 5 6 7 8 9)}] [a (get __as_1 :a)] [b (get __as_1 :b)] [__as_3 (get __as_1 :c)] [x (nth __as_3 0)] [y (nth __as_3 1)] [zs (drop 2 __as_3)]]
+code:  (destruct (quote {a :a b :b [x y & zs] :c d :d :or {:d 1000}}) {:a 1 :b 2 :c (range 10)}) 
+    -->  [[__as_1 {:a 1 :b 2 :c (0 1 2 3 4 5 6 7 8 9)}] [a (get __as_1 :a)] [b (get __as_1 :b)] [__as_3 (get __as_1 :c)] [x (nth __as_3 0)] [y (nth __as_3 1)] [zs (drop 2 __as_3)] [d (get __as_1 :d 1000)]]
+code:  (destruct (quote {a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}}) {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}) 
+    -->  [[__as_1 {:a 1 :b 2 :c (0 1 2 3 4 5 6 7 8 9) :e {:g 100 :h 200}}] [a (get __as_1 :a)] [b (get __as_1 :b)] [__as_3 (get __as_1 :c)] [x (nth __as_3 0)] [y (nth __as_3 1)] [zs (drop 2 __as_3)] [d (get __as_1 :d 1000)] [__as_3 (get __as_1 :e)] [g (get __as_3 :g)] [h (get __as_3 :h)]]
+code:  (let [[] []] nada) 
+    -->  nada
+code:  (let [[a b c] [1 2 3]] [a b c]) 
+    -->  [1 2 3]
+code:  (let [[a b c & cs] (range 10)] [a b c cs]) 
+    -->  [0 1 2 (3 4 5 6 7 8 9)]
+code:  (let [{a :a b :b c :c} {:a 1 :b 2 :c 3}] [a b c]) 
+    -->  [1 2 3]
+code:  (let [{a :a b :b [x y & zs] :c} {:a 1 :b 2 :c (range 10)}] [a b x y zs]) 
+    -->  [1 2 0 1 (2 3 4 5 6 7 8 9)]
+code:  (let [{a :a b :b [x y & zs] :c d :d :or {:d 1000}} {:a 1 :b 2 :c (range 10)}] [a b x y zs d]) 
+    -->  [1 2 0 1 (2 3 4 5 6 7 8 9) 1000]
+code:  (let [{a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}} {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}] [a b x y zs d g h]) 
+    -->  [1 2 0 1 (2 3 4 5 6 7 8 9) 1000 100 200]
+code:  (def list-of-things (range 10 20)) 
+    -->  (10 11 12 13 14 15 16 17 18 19)
+code:  (let [[a b c & cs] list-of-things] [a b c cs]) 
+    -->  [10 11 12 (13 14 15 16 17 18 19)]
+code:  (let [list-of-things (range 10)] (let [[a b c & cs] list-of-things] [a b c cs])) 
+    -->  [0 1 2 (3 4 5 6 7 8 9)]
+code:  (defn uh-oh [list-of-things] (let [[a b c & cs] list-of-things] [a b c cs])) 
+    -->  <function _function.<locals>.fn at 0x102dcade0>
+code:  (uh-oh (range 10)) 
+    -->  [0 1 2 (3 4 5 6 7 8 9)]
+code:  (let [list-of-things (range 10)] list-of-things) 
+    -->  (0 1 2 3 4 5 6 7 8 9)
+code:  (defn configure [val & {:keys [debug verbose] :or {:debug false :verbose false} :as options}] (str val =  val  debug =  debug  verbose =  verbose)) 
+    -->  <function _function.<locals>.fn at 0x102dcb420>
+code:  (configure 12 {:debug true}) 
+    -->  val = 12 debug = true verbose = false
+code:  (configure 12 :debug true) 
+    -->  val = 12 debug = true verbose = false
+code:  (defn ma-configure ([val & {:keys [debug verbose] :or {:debug false :verbose false} :as options}] (str val =  val  debug =  debug  verbose =  verbose)) ([] (ma-configure 17 :verbose true))) 
+    -->  <function _multi_arity_function.<locals>.fn at 0x102fcf920>
+code:  (ma-configure) 
+    -->  val = 17 debug = false verbose = true
+code:  (ma-configure 21) 
+    -->  val = 21 debug = false verbose = false
+code:  (ma-configure 21 :debug true) 
+    -->  val = 21 debug = true verbose = false
+code:  (ma-configure 21 {:verbose true}) 
+    -->  val = 21 debug = false verbose = true
+code:  (merge {:a 1 :b 2 :c 3} {:b 10 :d 20} {:a 11 :x 87}) 
+    -->  {:a 11 :b 10 :c 3 :d 20 :x 87}
+code:  (compact-key-val-trailing-pairs (quote [])) 
+    -->  {}
+code:  (compact-key-val-trailing-pairs (quote [:a 1])) 
+    -->  {:a 1}
+code:  (compact-key-val-trailing-pairs (quote [23 :a 1])) 
+    -->  {:a 1}
+code:  (compact-key-val-trailing-pairs (quote [23 {:A 3 :B 27} 41 {:b 33 :c 44} :a 1])) 
+    -->  {:b 33 :c 44 :a 1}
+```
+Ok, non sono tests, ma quello è il programma del prossimo passo.

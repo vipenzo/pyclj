@@ -2,16 +2,16 @@
 
 
 (debug-eval
- (get-paths-sequential '[a b c] [])
- (get-paths-associative '{x :x y :y} [])
- (get-paths 'x [3 :x])
- (get-paths '[a {b :x}] [])
- (get-paths '[a {[b c] :x}] [])
- (get-paths '{[a {[b c] :x}] :z e :e} [])
- (get-paths '[a b & c] [])
- (get-paths '{x :x y :y :or {:y 33}} [])
- (get-paths '{:keys [x y z]} [])
- (get-paths '[a {x :x [y z] :yz :or {:yz [9 8]}}] [])
+ (get-r-paths-sequential '[a b c] 'pippo 3)
+ (get-r-paths-associative '{x :x y :y} 'pippo 3)
+ (get-r-paths 'x 'pippo 5)
+ (get-r-paths '[a {b :x}] 'foo 0)
+ (get-r-paths '[a {[b c] :x}] 'foo 0)
+ (get-r-paths '{[a {[b c] :x}] :z e :e} 'foo 0)
+ (get-r-paths '[a b & c] 'foo 0)
+ (get-r-paths '{x :x y :y :or {:y 33}} 'foo 0)
+ (get-r-paths '{:keys [x y z]} 'foo 0)
+ (get-r-paths '[a {x :x [y z] :yz :or {:yz [9 8]}}] 'foo 0)
  )
 
 (debug-eval
@@ -23,6 +23,7 @@
  (let [{:keys [x y]} {:x 7 :y 2}] (+ x y))
  (let [{:keys [x y] :or {:x 7 :y 2}} {}] (+ x y))
  (let [[a & v] [1 2 3]] (- (apply + v) a))
+ (let [[x {a :a b :b :as y} & {:keys [o1 o2] :as v}] [3 {:a 32 :b 44} :o1 5 :o2 6]] [x a b y o1 o2 v])
  )
 
 (debug-eval
@@ -32,7 +33,7 @@
 
  )
 
-(comment debug-eval
+(debug-eval
  (destruct '[] [])
  (destruct '[a b c] [1 2 3])
  (destruct '[a b c & cs] (range 10))
@@ -43,7 +44,7 @@
  (destruct '{a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}}
            {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}))
 
-(comment debug-eval
+(debug-eval
  (let [[] []] "nada")
  (let [[a b c] [1 2 3]] [a b c])
  (let [[a b c & cs] (range 10)] [a b c cs])
@@ -55,7 +56,7 @@
        {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}] [a b x y zs d g h]))
 
 
-(comment debug-eval
+(debug-eval
  (def list-of-things (range 10 20))
 
 ;; OK...
@@ -74,20 +75,34 @@
  (let [list-of-things (range 10)]
    list-of-things))
 
-; Multi Arity Functions
-(comment defmacro fn+ [params & xs]
-  (if (every? list? (cons params xs))
-    (let* [make-pair (fn* [params-and-body]
-                          (let* [params (first params-and-body)
-                                 body (rest params-and-body)
-                                 variadic? (some (fn* [par] (= (str par) "&")) params)
-                                 k (if variadic? -1 (count params))]
-                                [k [params `(do ~@body)]]))
-           maf-dict (apply hash-map (apply concat (map make-pair (cons params xs))))]
-          `(fn** ~maf-dict))
-    `(fn-- ~params  ~@xs)))
+(debug-eval
+ (defn configure [val & {:keys [debug verbose] :or {:debug false, :verbose false} :as options}]
+   (str "val = " val " debug = " debug " verbose = "  verbose))
+
+ (configure 12 {:debug true})
+ (configure 12 :debug true)
+
+ (defn ma-configure ([val & {:keys [debug verbose] :or {:debug false, :verbose false} :as options}]
+                     (str "val = " val " debug = " debug " verbose = "  verbose))
+                    ([] (ma-configure 17 :verbose true)))
+ (ma-configure)
+(ma-configure 21)
+(ma-configure 21 :debug true)
+ (ma-configure 21 {:verbose true})
+)
+ 
 
 
 
+(debug-eval
+ (merge {:a 1 :b 2 :c 3} {:b 10 :d 20} {:a 11 :x 87})
+ )
 
 
+                                             
+
+(debug-eval
+ (compact-key-val-trailing-pairs '[])
+ (compact-key-val-trailing-pairs '[:a 1])
+ (compact-key-val-trailing-pairs '[23 :a 1])
+ (compact-key-val-trailing-pairs '[23 {:A 3 :B 27} 41 {:b 33 :c 44} :a 1]))
