@@ -6,6 +6,10 @@ def BOOT():
     def REP(str):
         return PRINT(EVAL(READ(str), boot_env))
 
+    def RE(str):
+        return EVAL(READ(str), boot_env)
+
+
     # core.py: defined using python
     for k, v in core.ns.items(): boot_env.set(types._symbol(k), v)
     boot_env.set(types._symbol('eval'), lambda ast: EVAL(ast, boot_env))
@@ -77,5 +81,5 @@ def BOOT():
     def REPL():
         REP("(repl-loop)")
         
-    return REP, REPL
+    return RE, REP, REPL
 

@@ -1,39 +1,12 @@
   
 
 
-(debug-eval
- (get-r-paths-sequential '[a b c] 'pippo 3)
- (get-r-paths-associative '{x :x y :y} 'pippo 3)
- (get-r-paths 'x 'pippo 5)
- (get-r-paths '[a {b :x}] 'foo 0)
- (get-r-paths '[a {[b c] :x}] 'foo 0)
- (get-r-paths '{[a {[b c] :x}] :z e :e} 'foo 0)
- (get-r-paths '[a b & c] 'foo 0)
- (get-r-paths '{x :x y :y :or {:y 33}} 'foo 0)
- (get-r-paths '{:keys [x y z]} 'foo 0)
- (get-r-paths '[a {x :x [y z] :yz :or {:yz [9 8]}}] 'foo 0)
- )
-
-(debug-eval
- (let [x 3 y 4] (+ x y))
- (let [[x y] [3 4]] (+ x y))
- (let [{x :x [y z] :yz} {:x 3 :yz [4 5]}] (+ x y))
- (let [{x :x [y z] :yz :or {:yz [88 89]}} {:x 3}] (+ x y))
- (let [{x :x [y z] :yz :or {:yz [88 89] :x 4}} {}] (+ x y))
- (let [{:keys [x y]} {:x 7 :y 2}] (+ x y))
- (let [{:keys [x y] :or {:x 7 :y 2}} {}] (+ x y))
- (let [[a & v] [1 2 3]] (- (apply + v) a))
- (let [[x {a :a b :b :as y} & {:keys [o1 o2] :as v}] [3 {:a 32 :b 44} :o1 5 :o2 6]] [x a b y o1 o2 v])
- )
-
-(debug-eval
+(debug-eval-to-test test-fn
  ((fn ([x y] (+ x y)) ([[x y]] (recur x y))) [3 4])
  ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4])
- ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4 5])
+ ((fn ([& v] (apply + v)) ([[x y]] (recur x y))) [3 4 5]))
 
- )
-
-(debug-eval
+(debug-eval-to-test test-destruct
  (destruct '[] [])
  (destruct '[a b c] [1 2 3])
  (destruct '[a b c & cs] (range 10))
@@ -44,7 +17,7 @@
  (destruct '{a :a b :b [x y & zs] :c d :d {:keys [g h]} :e :or {:d 1000}}
            {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}))
 
-(debug-eval
+(debug-eval-to-test test-let
  (let [[] []] "nada")
  (let [[a b c] [1 2 3]] [a b c])
  (let [[a b c & cs] (range 10)] [a b c cs])
@@ -56,7 +29,7 @@
        {:a 1 :b 2 :c (range 10) :e {:g 100 :h 200}}] [a b x y zs d g h]))
 
 
-(debug-eval
+(debug-eval-to-test test-let-strange
  (def list-of-things (range 10 20))
 
 ;; OK...
@@ -75,7 +48,7 @@
  (let [list-of-things (range 10)]
    list-of-things))
 
-(debug-eval
+(debug-eval-to-test test-trailing-maps
  (defn configure [val & {:keys [debug verbose] :or {:debug false, :verbose false} :as options}]
    (str "val = " val " debug = " debug " verbose = "  verbose))
 
@@ -94,14 +67,14 @@
 
 
 
-(debug-eval
+(debug-eval-to-test test-merge
  (merge {:a 1 :b 2 :c 3} {:b 10 :d 20} {:a 11 :x 87})
  )
 
 
                                              
 
-(debug-eval
+(debug-eval-to-test test-compact-key-val-trailing-pairs
  (compact-key-val-trailing-pairs '[])
  (compact-key-val-trailing-pairs '[:a 1])
  (compact-key-val-trailing-pairs '[23 :a 1])

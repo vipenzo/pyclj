@@ -144,9 +144,28 @@
 
 ; test framework
 (def deftests (atom {}))
+(def test-options (atom {:pythonize-result false}))
+(def tests-result (atom []))
+(def clear-tests-result (fn* [] (reset! tests-result [])))
+(defn get-tests-result []
+  (let [global-result (reduce (fn [acc r] (and acc (= (get r "type") "pass"))) true @tests-result)]
+       { "global-result" global-result
+        "tests-result" @tests-result}))
 
-(defn do-report [d]
-  (println "- " d))
+(defn set-pythonize-test-results [val]
+  (swap! test-options assoc :pythonize-result val)
+  )
+
+
+(def do-report (fn* [d]
+                    (if (get @test-options :pythonize-result)
+                      (let [dekeyword (fn* [x] (cond (keyword? x) (join (drop 1 x) "")
+                                                     (symbol? x) (str x)
+                                                     true x))
+                            report (apply hash-map (mapcat (fn* [k v] [(dekeyword k) (dekeyword v)]) (keys d) (vals d)))]
+                        (swap! tests-result conj report))
+                      (println "- " d))))
+
 
 (defn assert-expr [msg form]
   `(let [value__ ~form]
@@ -174,10 +193,22 @@
 (defn run-test_ [sname]
   (let [body (get @deftests sname)]
     (if body
-      (eval body)
-      (str "test " sname "not defined !"))))
+      (do
+        (clear-tests-result)
+        (eval body)
+        (let [res (get-tests-result)
+              global (get res "global-result")
+              tests (get res "tests-result")]
+          (if (not global) 
+            (do
+              (println "Test failed !")
+              (println "Tests result:")
+              (map println tests)))
+          res))
+      (str "test " sname " not defined !"))))
 
 (defmacro run-test [name] `(run-test_ '~name))
+
 
 (def! filter (fn* [pred coll]
                   (if (not (empty? coll))
@@ -380,5 +411,16 @@
               (println "code: " (str x) "\n    --> " (eval x)))]
          (map f  '~vals)))
 
+(defmacro strquote [x] (if (and (list? x) (= 'quote (first x))) (apply str " '" (rest x)) (str x)))
 
-(load-file "destruct.mal")
+(defmacro debug-eval-to-test [testname & vals]
+  (do
+    (println "(deftest " testname )
+    (let [f (fn [x]
+              (let [y (eval x)
+                    x (if (list? x) (map strquote x) x)]
+                (println "    (is (= "  x (str " '" y) "))")))]
+      (map f  vals)
+      (println ")"))))
+
+;(load-file "destruct.mal")

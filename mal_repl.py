@@ -52,5 +52,12 @@ while True:
 """
 
 from mal.boot import BOOT
-REP, REPL = BOOT()
+RE, REP, REPL = BOOT()
 REPL()
+
+"""
+print(RE('(load-file "./tests/destructuring_tests.clj")'))
+print(RE('(set-pythonize-test-results true)'))
+print(RE("(run-test test-destructuring)"))
+print(RE("(get-tests-result)"))
+"""
